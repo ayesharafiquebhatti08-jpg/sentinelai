@@ -1,7 +1,6 @@
 'use client'
 
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { useState, useEffect, useCallback } from 'react'
 
 export interface Incident {
   id: string
@@ -20,22 +19,10 @@ export interface Incident {
   isDemoData?: boolean
 }
 
-interface SentinelState {
-  hydrated: boolean
-  setHydrated: (val: boolean) => void
-  incidents: Incident[]
-  audit: { id: string; action: string; timestamp: number }[]
-  ambient: boolean
-  toggleAmbient: () => void
-  addIncident: (incident: Omit<Incident, 'id' | 'timestamp' | 'history'>) => string
-  updateStatus: (id: string, status: Incident['status'], actionLabel: string) => void
-  resetToDefaults: () => void
-}
-
 const INITIAL_INCIDENTS: Incident[] = [
   {
     id: 'INC-2026-001',
-    title: 'Unauthorized Perimeters Access Detected',
+    title: 'Unauthorized Perimeter Access Detected',
     zoneId: 'D',
     zoneName: 'Zone D · Perimeter Wall',
     category: 'Intrusion',
@@ -46,7 +33,7 @@ const INITIAL_INCIDENTS: Incident[] = [
     recommendedAction: 'Dispatch campus security patrol for visual verification.',
     uncertaintyNote: 'Shadow distortion possible under low-light floodlamps; human verification required.',
     timestamp: Date.now() - 1000 * 60 * 12,
-    history: [{ action: 'Automated AI detection trigger', time: Date.now() - 1000 * 60 * 12, system: true } as any],
+    history: [{ action: 'Automated AI detection trigger', time: Date.now() - 1000 * 60 * 12, user: 'System' }],
     isDemoData: true,
   },
   {
@@ -62,7 +49,7 @@ const INITIAL_INCIDENTS: Incident[] = [
     recommendedAction: 'Review live feed snapshot and notify student marshals.',
     uncertaintyNote: 'Possible student club gathering after hours.',
     timestamp: Date.now() - 1000 * 60 * 45,
-    history: [{ action: 'Flagged for human review queue', time: Date.now() - 1000 * 60 * 45, system: true } as any],
+    history: [{ action: 'Flagged for human review queue', time: Date.now() - 1000 * 60 * 45, user: 'System' }],
     isDemoData: true,
   },
   {
@@ -78,60 +65,94 @@ const INITIAL_INCIDENTS: Incident[] = [
     recommendedAction: 'No further action required.',
     uncertaintyNote: 'Zero ambiguity.',
     timestamp: Date.now() - 1000 * 60 * 120,
-    history: [{ action: 'Resolved automatically by system policy', time: Date.now() - 1000 * 60 * 120, system: true } as any],
+    history: [{ action: 'Resolved automatically by system policy', time: Date.now() - 1000 * 60 * 120, user: 'System' }],
     isDemoData: true,
   },
 ]
 
-export const useSentinelStore = create<SentinelState>()(
-  persist(
-    (set, get) => ({
-      hydrated: false,
-      setHydrated: (val) => set({ hydrated: val }),
-      incidents: INITIAL_INCIDENTS,
-      audit: [
-        { id: 'AUD-1', action: 'System initialized with demo seed data (Browser-local storage mode)', timestamp: Date.now() - 1000 * 60 * 200 }
-      ],
-      ambient: true,
-      toggleAmbient: () => set((state) => ({ ambient: !state.ambient })),
-      
-      addIncident: (data) => {
-        const id = `INC-${Date.now().toString().slice(-6)}`
-        const newIncident: Incident = {
-          ...data,
-          id,
-          timestamp: Date.now(),
-          history: [{ action: `Incident reported manually (${data.category})`, time: Date.now(), user: 'Operator' }],
-          isDemoData: false,
-        }
-        set((state) => ({
-          incidents: [newIncident, ...state.incidents],
-          audit: [{ id: `AUD-${Date.now()}`, action: `New incident reported: ${id} [${data.zoneName}]`, timestamp: Date.now() }, ...state.audit]
-        }))
-        return id
-      },
+export function useSentinelStore() {
+  const [hydrated, setHydrated] = useState(false)
+  const [incidents, setIncidents] = useState<Incident[]>(INITIAL_INCIDENTS)
+  const [audit, setAudit] = useState<{ id: string; action: string; timestamp: number }[]>([
+    { id: 'AUD-1', action: 'System initialized with demo seed data (Browser-local storage mode)', timestamp: Date.now() - 1000 * 60 * 200 }
+  ])
+  const [ambient, setAmbient] = useState(true)
 
-      updateStatus: (id, status, actionLabel) => {
-        set((state) => ({
-          incidents: state.incidents.map((inc) => {
-            if (inc.id !== id) return inc
-            return {
-              ...inc,
-              status,
-              history: [{ action: actionLabel, time: Date.now(), user: 'Operator' }, ...inc.history]
-            }
-          }),
-          audit: [{ id: `AUD-${Date.now()}`, action: `Incident ${id} updated to ${status}: ${actionLabel}`, timestamp: Date.now() }, ...state.audit]
-        }))
-      },
-
-      resetToDefaults: () => set({ incidents: INITIAL_INCIDENTS })
-    }),
-    {
-      name: 'sentinel-ai-storage-v2',
-      onRehydrateStorage: () => (state) => {
-        state?.setHydrated(true)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('sentinel_incidents_v3')
+      if (saved) {
+        setIncidents(JSON.parse(saved))
       }
+      const savedAudit = localStorage.getItem('sentinel_audit_v3')
+      if (savedAudit) {
+        setAudit(JSON.parse(savedAudit))
+      }
+    } catch (e) {
+      console.error(e)
     }
-  )
-)
+    setHydrated(true)
+  }, [])
+
+  const saveToStorage = (newIncidents: Incident[], newAudit: any[]) => {
+    try {
+      localStorage.setItem('sentinel_incidents_v3', JSON.stringify(newIncidents))
+      localStorage.setItem('sentinel_audit_v3', JSON.stringify(newAudit))
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const addIncident = useCallback((data: Omit<Incident, 'id' | 'timestamp' | 'history'>) => {
+    const id = `INC-${Date.now().toString().slice(-6)}`
+    const newIncident: Incident = {
+      ...data,
+      id,
+      timestamp: Date.now(),
+      history: [{ action: `Incident reported manually (${data.category})`, time: Date.now(), user: 'Operator' }],
+      isDemoData: false,
+    }
+    setIncidents(prev => {
+      const updated = [newIncident, ...prev]
+      setAudit(prevAudit => {
+        const updatedAudit = [{ id: `AUD-${Date.now()}`, action: `New incident reported: ${id} [${data.zoneName}]`, timestamp: Date.now() }, ...prevAudit]
+        saveToStorage(updated, updatedAudit)
+        return updatedAudit
+      })
+      return updated
+    })
+    return id
+  }, [])
+
+  const updateStatus = useCallback((id: string, status: Incident['status'], actionLabel: string) => {
+    setIncidents(prev => {
+      const updated = prev.map(inc => {
+        if (inc.id !== id) return inc
+        return {
+          ...inc,
+          status,
+          history: [{ action: actionLabel, time: Date.now(), user: 'Operator' }, ...inc.history]
+        }
+      })
+      setAudit(prevAudit => {
+        const updatedAudit = [{ id: `AUD-${Date.now()}`, action: `Incident ${id} updated to ${status}: ${actionLabel}`, timestamp: Date.now() }, ...prevAudit]
+        saveToStorage(updated, updatedAudit)
+        return updatedAudit
+      })
+      return updated
+    })
+  }, [])
+
+  const toggleAmbient = () => setAmbient(prev => !prev)
+
+  return {
+    hydrated,
+    setHydrated: () => {},
+    incidents,
+    audit,
+    ambient,
+    toggleAmbient,
+    addIncident,
+    updateStatus,
+  }
+}
