@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { ShieldAlert, Plus, Search, Radio, X } from 'lucide-react'
+import { ShieldAlert, Plus, Search, Radio, X, Sparkles, Clock, MapPin, AlertCircle } from 'lucide-react'
 import { useSentinelStore, Incident } from '@/lib/sentinel/store'
 
 export function Dashboard() {
@@ -11,6 +11,8 @@ export function Dashboard() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [assessmentText, setAssessmentText] = useState<string | null>(null)
+  const [assessing, setAssessing] = useState(false)
 
   // Form state for custom text inputs
   const [formLocation, setFormLocation] = useState('')
@@ -37,16 +39,16 @@ export function Dashboard() {
     setFormSubmitting(true)
     setTimeout(() => {
       store.addIncident({
-        title: formDesc.slice(0, 45) || formCategory || 'Reported Threat Incident',
-        zoneId: 'B', // Assigned to alarming zone feed
-        zoneName: formLocation || 'Custom Campus Location',
-        category: formCategory || 'Active Threat',
-        priority: 'critical',
-        status: 'active', // Forces it into active alarm status
-        confidence: 0.95,
-        indicators: ['Manual public report filed', formDesc],
-        recommendedAction: 'Immediate dispatch required for verification.',
-        uncertaintyNote: 'User-submitted report flagged into active alarm queue.',
+        title: formDesc.slice(0, 45) || formCategory || 'Reported Incident',
+        zoneId: 'B',
+        zoneName: formLocation || 'Parking Area',
+        category: formCategory || 'Fire or smoke concern',
+        priority: 'high',
+        status: 'review',
+        confidence: 0.92,
+        indicators: [formDesc || 'Reported observation from public input'],
+        recommendedAction: 'Verify observation on-site immediately.',
+        uncertaintyNote: 'Public report requires physical security verification.',
       })
       setFormSubmitting(false)
       setFormLocation('')
@@ -56,8 +58,16 @@ export function Dashboard() {
     }, 400)
   }
 
+  const handleDemoAssessment = () => {
+    setAssessing(true)
+    setTimeout(() => {
+      setAssessmentText("AI Assessment: High confidence risk signature identified near target zone. Immediate dispatch recommended. Potential heat source or crowd hazard detected.")
+      setAssessing(false)
+    }, 600)
+  }
+
   return (
-    <div className="min-h-screen bg-[#030508] text-slate-100 selection:bg-rose-500/30 selection:text-white font-sans">
+    <div className="min-h-screen bg-[#030508] text-slate-100 selection:bg-rose-500/35 selection:text-white font-sans">
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/40 via-[#030508] to-[#010203]" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-10">
@@ -123,7 +133,7 @@ export function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { id: 'A', name: 'Zone A · Main Gate', status: 'Normal', risk: '44', alert: false, img: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=800&q=80' },
-              { id: 'B', name: 'Zone B · Campus Corridor', status: activeCount > 0 ? 'ACTIVE THREAT ALARM' : 'Threat Alarming', risk: '81', alert: true, img: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80' },
+              { id: 'B', name: 'Zone B · Parking Area', status: activeCount > 0 ? 'ACTIVE THREAT ALARM' : 'Threat Alarming', risk: '81', alert: true, img: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80' },
               { id: 'C', name: 'Zone C · Server Room', status: 'Normal', risk: '58', alert: false, img: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80' },
               { id: 'D', name: 'Zone D · Perimeter Wall', status: 'Threat Alarming', risk: '99', alert: true, img: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f764e?auto=format&fit=crop&w=800&q=80' },
             ].map((cam) => (
@@ -201,7 +211,7 @@ export function Dashboard() {
               filteredIncidents.map((incident) => (
                 <div
                   key={incident.id}
-                  onClick={() => setSelectedIncident(incident)}
+                  onClick={() => { setSelectedIncident(incident); setAssessmentText(null); }}
                   className="group cursor-pointer rounded-2xl bg-white/[0.02] border border-white/[0.08] hover:border-white/20 p-5 space-y-4 transition-all hover:bg-white/[0.04]"
                 >
                   <div className="flex items-center justify-between">
@@ -211,7 +221,7 @@ export function Dashboard() {
                       incident.status === 'review' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
                       'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                     }`}>
-                      {incident.status}
+                      {incident.status === 'review' ? 'Needs Review' : incident.status}
                     </span>
                   </div>
 
@@ -230,68 +240,125 @@ export function Dashboard() {
           </div>
         </section>
 
-        {/* INCIDENT DETAILS INSPECTOR MODAL */}
+        {/* TEMPLATE-MATCHING INCIDENT DETAILS INSPECTOR MODAL */}
         {selectedIncident && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#0b0f17] border border-white/15 rounded-3xl max-w-2xl w-full p-8 space-y-6 shadow-2xl">
-              <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <div>
-                  <span className="font-mono text-xs text-rose-400">{selectedIncident.id} · {selectedIncident.zoneName}</span>
-                  <h2 className="text-xl font-bold text-white mt-1">{selectedIncident.title}</h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#090d14] border border-white/15 rounded-3xl max-w-2xl w-full p-8 space-y-8 shadow-2xl relative">
+              
+              {/* TOP HEADER */}
+              <div className="flex items-start justify-between border-b border-white/10 pb-5">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs font-bold text-slate-300">{selectedIncident.id}</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 font-mono text-[10px] uppercase font-bold">
+                      High Priority
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-[10px] uppercase font-bold">
+                      Needs Review
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-extrabold text-white">{selectedIncident.title}</h2>
                 </div>
-                <button onClick={() => setSelectedIncident(null)} className="p-2 rounded-full bg-white/5 text-slate-400 hover:text-white">
+                <button onClick={() => setSelectedIncident(null)} className="p-2 rounded-full bg-white/5 text-slate-400 hover:text-white transition-all">
                   <X className="size-5" />
                 </button>
               </div>
 
-              <div className="space-y-4 font-mono text-xs text-slate-300">
-                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 space-y-2">
-                  <span className="text-rose-400 font-bold uppercase tracking-wider block">Detected Indicators</span>
-                  <ul className="list-disc list-inside space-y-1 text-slate-200">
-                    {selectedIncident.indicators.map((ind, i) => <li key={i}>{ind}</li>)}
-                  </ul>
+              {/* GRID INFO */}
+              <div className="grid grid-cols-2 gap-y-6 gap-x-8 font-mono text-xs">
+                <div>
+                  <span className="text-slate-500 uppercase tracking-wider block mb-1">Source</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-200">
+                    <ShieldAlert className="size-3.5 text-rose-400" />
+                    Public report
+                  </span>
                 </div>
-
-                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-1">
-                  <span className="text-amber-400 font-bold uppercase tracking-wider block">Recommended Next Step</span>
-                  <p className="text-slate-200">{selectedIncident.recommendedAction}</p>
+                <div>
+                  <span className="text-slate-500 uppercase tracking-wider block mb-1">Location</span>
+                  <span className="text-white font-bold">{selectedIncident.zoneName}</span>
                 </div>
-
-                <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 space-y-1">
-                  <span className="text-sky-400 font-bold uppercase tracking-wider block">Uncertainty & Human Review Note</span>
-                  <p className="text-slate-200">{selectedIncident.uncertaintyNote}</p>
+                <div>
+                  <span className="text-slate-500 uppercase tracking-wider block mb-1">Type</span>
+                  <span className="text-white font-bold">{selectedIncident.category}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 uppercase tracking-wider block mb-1">Created</span>
+                  <span className="text-white font-bold">{new Date(selectedIncident.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
               </div>
 
-              {/* ACTION BUTTONS */}
-              <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-white/10">
-                <button
-                  onClick={() => { store.updateStatus(selectedIncident.id, 'acknowledged', 'Acknowledged by operator'); setSelectedIncident(null); }}
-                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 font-mono text-xs font-bold text-white transition-all"
-                >
-                  Acknowledge
-                </button>
-                <button
-                  onClick={() => { store.updateStatus(selectedIncident.id, 'review', 'Flagged for review queue'); setSelectedIncident(null); }}
-                  className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-mono text-xs font-bold transition-all"
-                >
-                  Mark for Review
-                </button>
+              {/* DESCRIPTION */}
+              <div className="space-y-2 font-mono text-xs">
+                <span className="text-slate-500 uppercase tracking-wider block">Description</span>
+                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/10 text-slate-200 leading-relaxed">
+                  {selectedIncident.indicators[1] || selectedIncident.indicators[0] || 'No detailed description provided.'}
+                </div>
+              </div>
+
+              {/* AI-ASSISTED ASSESSMENT BOX */}
+              <div className="p-5 rounded-2xl bg-[#0e1420] border border-white/10 space-y-4">
+                <div className="flex items-center gap-2 text-sky-400 font-bold text-xs">
+                  <Sparkles className="size-4" />
+                  <span>AI-assisted assessment</span>
+                </div>
+
+                <p className="font-mono text-xs text-slate-300 leading-relaxed">
+                  {assessmentText || "No assessment yet. Live AI sends only the incident type, location, description, priority, and source to the model. If live AI is unavailable, use the transparent rules-based demo."}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <button
+                    onClick={handleDemoAssessment}
+                    disabled={assessing}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-mono text-xs font-bold transition-all shadow-lg shadow-sky-600/20"
+                  >
+                    <Sparkles className="size-3.5" />
+                    <span>{assessing ? 'Evaluating...' : 'Assess with live AI'}</span>
+                  </button>
+                  <button
+                    onClick={handleDemoAssessment}
+                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-mono text-xs font-bold transition-all"
+                  >
+                    Generate demo assessment
+                  </button>
+                </div>
+              </div>
+
+              {/* ACTIVITY HISTORY */}
+              <div className="space-y-3 pt-2">
+                <span className="font-mono text-xs text-slate-400 uppercase tracking-wider block">Activity history</span>
+                <div className="space-y-3 border-l border-white/10 pl-4 ml-1 font-mono text-xs">
+                  <div className="relative">
+                    <span className="absolute -left-[21px] top-1 size-2 rounded-full bg-sky-500 ring-4 ring-[#090d14]" />
+                    <p className="text-slate-200">Initial priority High assigned from incident type. Status set to Needs Review.</p>
+                    <span className="text-[10px] text-slate-500">System · {new Date(selectedIncident.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute -left-[21px] top-1 size-2 rounded-full bg-rose-500 ring-4 ring-[#090d14]" />
+                    <p className="text-slate-200">Public report submitted.</p>
+                    <span className="text-[10px] text-slate-500">Reporter · {new Date(selectedIncident.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* FOOTER ACTIONS */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
                 <button
                   onClick={() => { store.updateStatus(selectedIncident.id, 'resolved', 'Incident marked resolved'); setSelectedIncident(null); }}
-                  className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-mono text-xs font-bold transition-all"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold transition-all shadow-lg shadow-emerald-600/20"
                 >
                   Resolve Incident
                 </button>
               </div>
+
             </motion.div>
           </div>
         )}
 
         {/* PUBLIC INCIDENT REPORT MODAL */}
         {showReportModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#0b0f17] border border-white/15 rounded-3xl max-w-lg w-full p-8 space-y-6 shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#090d14] border border-white/15 rounded-3xl max-w-lg w-full p-8 space-y-6 shadow-2xl relative">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <h2 className="text-lg font-bold text-white">Public Incident Report Form</h2>
                 <button onClick={() => setShowReportModal(false)} className="p-2 rounded-full bg-white/5 text-slate-400 hover:text-white">
@@ -305,7 +372,7 @@ export function Dashboard() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g., Main Library Entrance, Parking Lot C..."
+                    placeholder="e.g., Parking Area, Main Library Entrance..."
                     value={formLocation}
                     onChange={(e) => setFormLocation(e.target.value)}
                     className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-rose-500"
@@ -317,7 +384,7 @@ export function Dashboard() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g., Unauthorized Entry, Suspicious Package..."
+                    placeholder="e.g., Fire or smoke concern, Unauthorized Entry..."
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
                     className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-rose-500"
