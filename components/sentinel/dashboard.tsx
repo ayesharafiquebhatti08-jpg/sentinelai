@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { ShieldAlert, Plus, Search, Radio, X, Sparkles, Clock, MapPin, AlertCircle } from 'lucide-react'
+import { ShieldAlert, Plus, Search, Radio, X, Sparkles } from 'lucide-react'
 import { useSentinelStore, Incident } from '@/lib/sentinel/store'
 
 export function Dashboard() {
@@ -41,14 +41,14 @@ export function Dashboard() {
       store.addIncident({
         title: formDesc.slice(0, 45) || formCategory || 'Reported Incident',
         zoneId: 'B',
-        zoneName: formLocation || 'Parking Area',
-        category: formCategory || 'Fire or smoke concern',
-        priority: 'high',
-        status: 'review',
-        confidence: 0.92,
+        zoneName: formLocation || 'Campus Corridor',
+        category: formCategory || 'Security Threat',
+        priority: 'critical',
+        status: 'active',
+        confidence: 0.95,
         indicators: [formDesc || 'Reported observation from public input'],
         recommendedAction: 'Verify observation on-site immediately.',
-        uncertaintyNote: 'Public report requires physical security verification.',
+        uncertaintyNote: 'Public report flagged into active threat monitoring queue.',
       })
       setFormSubmitting(false)
       setFormLocation('')
@@ -118,51 +118,98 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* 4 CAMERA FEEDS (PRIMARY MONITORING VIEW) */}
+        {/* 4 ACTIVE CAMERA FEEDS (MATCHING REFERENCE DESIGN) */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <Radio className="size-5 text-rose-500 animate-pulse" />
-              <span>Simulated Surveillance Matrix (4 Zones)</span>
+              <span>Live Camera Feeds <span className="text-slate-500 text-sm font-normal">4 feeds</span></span>
             </h2>
             <span className="font-mono text-[11px] text-slate-400 bg-white/5 px-3 py-1 rounded-full border border-white/10">
-              Demo Feeds · Simulated Computer Vision Overlays Only
+              Simulated Computer Vision Overlays
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[
-              { id: 'A', name: 'Zone A · Main Gate', status: 'Normal', risk: '44', alert: false, img: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=800&q=80' },
-              { id: 'B', name: 'Zone B · Parking Area', status: activeCount > 0 ? 'ACTIVE THREAT ALARM' : 'Threat Alarming', risk: '81', alert: true, img: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80' },
-              { id: 'C', name: 'Zone C · Server Room', status: 'Normal', risk: '58', alert: false, img: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80' },
-              { id: 'D', name: 'Zone D · Perimeter Wall', status: 'Threat Alarming', risk: '99', alert: true, img: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f764e?auto=format&fit=crop&w=800&q=80' },
+              { id: 'A', cam: 'CAM-01', name: 'Zone A · Main Gate', risk: '44', alert: false, signals: '1 active signal', img: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&q=80' },
+              { id: 'B', cam: 'CAM-02', name: 'Zone B · Campus Corridor', risk: '79', alert: true, signals: '4 active signals', img: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1200&q=80' },
+              { id: 'C', cam: 'CAM-03', name: 'Zone C · Server Room', risk: '58', alert: false, signals: '1 active signal', img: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80' },
+              { id: 'D', cam: 'CAM-04', name: 'Zone D · Perimeter Wall', risk: '99', alert: true, signals: '4 active signals', img: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f764e?auto=format&fit=crop&w=1200&q=80' },
             ].map((cam) => (
-              <div key={cam.id} className={`relative rounded-2xl overflow-hidden border bg-black/60 backdrop-blur-md ${cam.alert ? 'border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.2)]' : 'border-white/10'}`}>
-                <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-3 bg-gradient-to-b from-black/80 to-transparent font-mono text-[10px]">
-                  <span className="flex items-center gap-1.5 text-white">
-                    <span className={`size-2 rounded-full ${cam.alert ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`} />
-                    CAM-0{cam.id === 'A' ? 1 : cam.id === 'B' ? 2 : cam.id === 'C' ? 3 : 4}
-                  </span>
-                  <span className="text-slate-400">REC</span>
-                </div>
-
-                <div className="relative aspect-[16/10] bg-black overflow-hidden">
-                  <img src={cam.img} alt={cam.name} className={`w-full h-full object-cover ${cam.alert ? 'contrast-125 sepia-[0.3]' : 'grayscale contrast-110'}`} />
-                  {cam.alert && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-36 h-24 border-2 border-rose-500 bg-rose-500/10 rounded flex items-start justify-between p-1.5 font-mono text-[8px] text-white">
-                        <span className="bg-rose-500 px-1 py-0.5 rounded font-bold">THREAT {cam.risk}%</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-3 bg-black/90 border-t border-white/10 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xs font-bold text-white">{cam.name}</h3>
-                    <p className={`font-mono text-[10px] ${cam.alert ? 'text-rose-400' : 'text-emerald-400'}`}>{cam.status}</p>
+              <div
+                key={cam.id}
+                className={`group relative overflow-hidden rounded-3xl border bg-black/60 transition-all duration-300 backdrop-blur-xl ${
+                  cam.alert
+                    ? 'border-rose-500/60 shadow-[0_0_30px_rgba(244,63,94,0.2)] ring-1 ring-rose-500/30'
+                    : 'border-white/10 hover:border-white/20'
+                }`}
+              >
+                {/* Camera Header Overlay */}
+                <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 font-mono text-[11px] text-white/90">
+                  <div className="flex items-center gap-2">
+                    <span className={`size-2 rounded-full ${cam.alert ? 'bg-rose-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
+                    <span className="font-bold tracking-wider">REC</span>
+                    <span className="text-white/40">·</span>
+                    <span className="tracking-wider text-white/80">{cam.cam}</span>
                   </div>
-                  <span className={`font-mono text-sm font-bold ${cam.alert ? 'text-rose-500' : 'text-amber-400'}`}>{cam.risk}</span>
+                  <div className="text-white/70 tracking-widest font-mono">
+                    {new Date().toLocaleTimeString()}
+                  </div>
+                </div>
+
+                {/* Camera Feed Visual Container */}
+                <div className="relative aspect-[16/10] w-full overflow-hidden bg-black">
+                  <img
+                    src={cam.img}
+                    alt={cam.name}
+                    className={`absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105 ${
+                      cam.alert ? 'contrast-125 sepia-[0.3] hue-rotate-[-20deg]' : 'grayscale contrast-110'
+                    }`}
+                  />
+
+                  {/* Scanlines Effect Overlay */}
+                  <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(to_bottom,rgba(255,255,255,0)_50%,rgba(0,0,0,0.4)_50%)] bg-[length:100%_4px]" />
+                  
+                  {/* Vignette */}
+                  <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_40%,rgba(0,0,0,0.8)_100%)]" />
+
+                  {/* Glowing AI Bounding Box */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <motion.div
+                      animate={{ scale: [1, 1.02, 1], opacity: [0.8, 1, 0.8] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className={`relative w-48 h-32 border-2 rounded-lg flex items-start justify-between p-2 ${
+                        cam.alert
+                          ? 'border-rose-500 bg-rose-500/10 shadow-[0_0_20px_rgba(244,63,94,0.5)]'
+                          : 'border-amber-400/60 bg-amber-400/5'
+                      }`}
+                    >
+                      <span className={`font-mono text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider text-white ${cam.alert ? 'bg-rose-500' : 'bg-amber-500'}`}>
+                        {cam.alert ? 'THREAT DETECTED' : 'MONITORING'}
+                      </span>
+                    </motion.div>
+                  </div>
+                </div>
+
+                {/* Camera Footer Details */}
+                <div className="relative z-20 flex items-center justify-between border-t border-white/10 bg-black/85 p-4 backdrop-blur-md">
+                  <div>
+                    <h3 className="text-base font-bold text-white">
+                      {cam.name}
+                    </h3>
+                    <div className="mt-1 flex items-center gap-2 font-mono text-[11px] text-slate-400">
+                      <span className={`inline-block size-1.5 rounded-full ${cam.alert ? 'bg-rose-500' : 'bg-amber-400'}`} />
+                      <span>{cam.signals}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500 block">RISK</span>
+                    <p className={`text-2xl font-extrabold font-mono ${cam.alert ? 'text-rose-500' : 'text-amber-400'}`}>
+                      {cam.risk}
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}
@@ -245,7 +292,6 @@ export function Dashboard() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#090d14] border border-white/15 rounded-3xl max-w-2xl w-full p-8 space-y-8 shadow-2xl relative">
               
-              {/* TOP HEADER */}
               <div className="flex items-start justify-between border-b border-white/10 pb-5">
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
@@ -264,7 +310,6 @@ export function Dashboard() {
                 </button>
               </div>
 
-              {/* GRID INFO */}
               <div className="grid grid-cols-2 gap-y-6 gap-x-8 font-mono text-xs">
                 <div>
                   <span className="text-slate-500 uppercase tracking-wider block mb-1">Source</span>
@@ -287,7 +332,6 @@ export function Dashboard() {
                 </div>
               </div>
 
-              {/* DESCRIPTION */}
               <div className="space-y-2 font-mono text-xs">
                 <span className="text-slate-500 uppercase tracking-wider block">Description</span>
                 <div className="p-4 rounded-xl bg-white/[0.03] border border-white/10 text-slate-200 leading-relaxed">
@@ -295,17 +339,14 @@ export function Dashboard() {
                 </div>
               </div>
 
-              {/* AI-ASSISTED ASSESSMENT BOX */}
               <div className="p-5 rounded-2xl bg-[#0e1420] border border-white/10 space-y-4">
                 <div className="flex items-center gap-2 text-sky-400 font-bold text-xs">
                   <Sparkles className="size-4" />
                   <span>AI-assisted assessment</span>
                 </div>
-
                 <p className="font-mono text-xs text-slate-300 leading-relaxed">
                   {assessmentText || "No assessment yet. Live AI sends only the incident type, location, description, priority, and source to the model. If live AI is unavailable, use the transparent rules-based demo."}
                 </p>
-
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   <button
                     onClick={handleDemoAssessment}
@@ -324,24 +365,6 @@ export function Dashboard() {
                 </div>
               </div>
 
-              {/* ACTIVITY HISTORY */}
-              <div className="space-y-3 pt-2">
-                <span className="font-mono text-xs text-slate-400 uppercase tracking-wider block">Activity history</span>
-                <div className="space-y-3 border-l border-white/10 pl-4 ml-1 font-mono text-xs">
-                  <div className="relative">
-                    <span className="absolute -left-[21px] top-1 size-2 rounded-full bg-sky-500 ring-4 ring-[#090d14]" />
-                    <p className="text-slate-200">Initial priority High assigned from incident type. Status set to Needs Review.</p>
-                    <span className="text-[10px] text-slate-500">System · {new Date(selectedIncident.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute -left-[21px] top-1 size-2 rounded-full bg-rose-500 ring-4 ring-[#090d14]" />
-                    <p className="text-slate-200">Public report submitted.</p>
-                    <span className="text-[10px] text-slate-500">Reporter · {new Date(selectedIncident.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* FOOTER ACTIONS */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
                 <button
                   onClick={() => { store.updateStatus(selectedIncident.id, 'resolved', 'Incident marked resolved'); setSelectedIncident(null); }}
