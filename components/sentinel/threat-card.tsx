@@ -1,144 +1,340 @@
 'use client'
 
 import { motion } from 'motion/react'
-import { Video } from 'lucide-react'
+import { Ban, CircleCheck, Clock, Lock, MapPin, ShieldCheck, Siren, Truck, UserCheck, Wrench, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatPreciseTime, SEVERITY_STYLES, THREAT_ICONS } from '@/lib/sentinel/format'
-import { type Zone } from '@/lib/sentinel/scenarios'
+import { formatPreciseTime, formatRelative, SEVERITY_STYLES, THREAT_ICONS } from '@/lib/sentinel/format'
+import { REVIEW_THRESHOLD, SCENARIOS, ZONES } from '@/lib/sentinel/scenarios'
+import { sentinel } from '@/lib/sentinel/store'
 import type { Incident } from '@/lib/sentinel/types'
-import { NeonBadge, type Tone } from './neon-badge'
+import { NeonBadge } from './neon-badge'
 
-export function CameraCard({
-  zone,
-  now,
-  threat,
-  reviewCount,
-}: {
-  zone: Zone
-  now: number
-  threat?: Incident
-  reviewCount: number
-}) {
-  const Icon = threat ? THREAT_ICONS[threat.type] : Video
+type CardTone = 'threat' | 'warn' | 'info' | 'safe'
 
-  const dispatched = Boolean(threat?.dispatchedAt)
-  const onSite = Boolean(threat?.onSiteAt)
-  const resolving = Boolean(threat?.resolvingAt)
-  const closing = Boolean(threat?.closingAt)
-  const contained = dispatched || threat?.protocolAt
+const TONE_STYLES: Record<CardTone, { accent: string; tile: string; value: string; bar: string; banner: string }> = {
+  threat: {
+    accent: 'bg-threat shadow-[0_0_14px_var(--threat)]',
+    tile: 'neon-threat',
+    value: 'text-threat text-glow-threat',
+    bar: 'bg-threat shadow-[0_0_10px_var(--threat)]',
+    banner: 'bg-gradient-to-r from-threat via-threat/85 to-threat/45 text-white',
+  },
+  warn: {
+    accent: 'bg-warn shadow-[0_0_14px_var(--warn)]',
+    tile: 'neon-warn',
+    value: 'text-warn',
+    bar: 'bg-warn shadow-[0_0_10px_var(--warn)]',
+    banner: 'border-b border-warn/20 bg-warn/[0.08] text-warn',
+  },
+  safe: {
+    accent: 'bg-safe shadow-[0_0_14px_var(--safe)]',
+    tile: 'neon-safe',
+    value: 'text-safe',
+    bar: 'bg-safe shadow-[0_0_10px_var(--safe)]',
+    banner: 'border-b border-safe/20 bg-safe/[0.08] text-safe',
+  },
+  info: {
+    accent: 'bg-info shadow-[0_0_14px_var(--info)]',
+    tile: 'neon-info',
+    value: 'text-info',
+    bar: 'bg-info shadow-[0_0_10px_var(--info)]',
+    banner: 'border-b border-info/20 bg-info/[0.08] text-info',
+  },
+}
 
-  const status: { label: string; tone: Tone; solid?: boolean; pulse?: boolean } = threat
-    ? closing
-      ? { label: 'Problem Resolved', tone: 'safe' }
+export function ThreatCard({ incident, now }: { incident: Incident; now: number }) {
+  const Icon = THREAT_ICONS[incident.type]
+  const zone = ZONES[incident.zoneId]
+  const sev = SEVERITY_STYLES[incident.severity]
+  const isReview = incident.queue === 'review'
+  const dispatched = Boolean(incident.dispatchedAt)
+  const onSite = Boolean(incident.onSiteAt)
+  const resolving = Boolean(incident.resolvingAt)
+  const closing = Boolean(incident.closingAt)
+  const protocol = Boolean(incident.protocolAt)
+  const contained = dispatched || protocol
+  const tone: CardTone = isReview ? 'info' : closing ? 'safe' : contained ? 'warn' : 'threat'
+  const t = TONE_STYLES[tone]
+
+  const bannerText = isReview
+    ? 'Low Confidence · Awaiting Human Verification'
+    : closing
+      ? 'Problem Resolved · Archiving to Audit Log'
       : resolving
-        ? { label: 'Resolving Issue', tone: 'warn', pulse: true }
+        ? 'Resolving Issue · Response In Progress'
         : onSite
-          ? { label: 'Team On-Site', tone: 'warn', pulse: true }
-          : contained
-            ? { label: 'Units Dispatched', tone: 'warn', pulse: true }
-            : { label: 'Threat', tone: 'threat', solid: true, pulse: true }
-    : reviewCount > 0
-      ? { label: 'Review', tone: 'info' }
-      : { label: 'Clear', tone: 'safe' }
+          ? 'Team On-Site · Response In Progress'
+          : dispatched
+            ? 'Units Dispatched · Response In Progress'
+            : contained
+              ? 'Response In Progress'
+              : `Critical Alert · ${SCENARIOS[incident.type].alertLabel}`
 
-  const hudColor = threat
-    ? closing
-      ? 'border-safe'
-      : resolving
-        ? 'border-warn'
-        : onSite
-          ? 'border-warn'
-          : contained
-            ? 'border-warn'
-            : 'border-threat'
-    : 'border-white/40'
+  const stage = closing ? 3 : resolving ? 2 : onSite ? 1 : dispatched ? 0 : -1
 
   return (
-    <article
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: -16, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }}
+      transition={{ type: 'spring', stiffness: 320, damping: 30 }}
       className={cn(
-        'panel relative flex flex-col overflow-hidden rounded-2xl border',
-        threat ? (threat.severity === 'critical' ? 'panel-alert' : 'panel-warn') : 'border-border',
+        'panel relative overflow-hidden rounded-2xl',
+        tone === 'threat' && 'panel-alert',
+        tone === 'warn' && 'panel-warn',
       )}
-      aria-label={`Camera feed for Zone ${zone.id} - ${zone.name}`}
+      aria-label={`${incident.title} in Zone ${incident.zoneId}`}
     >
-      <div className="relative aspect-[16/9] w-full overflow-hidden bg-black/60">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-cover bg-center opacity-45 mix-blend-luminosity filter contrast-125"
-          style={{ backgroundImage: `url(${zone.image})` }}
-        />
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
+      <span aria-hidden="true" className={cn('absolute inset-y-0 left-0 z-10 w-[3px]', t.accent)} />
 
-        <div className="absolute inset-x-3 top-3 flex items-center justify-between font-mono text-[10px]">
-          <span className="flex items-center gap-1.5 rounded bg-black/60 px-2 py-0.5 text-white/90 backdrop-blur-md">
-            <span className="size-2 rounded-full bg-threat animate-pulse" aria-hidden="true" />
-            <span className="font-bold tracking-wider">REC</span>
-          </span>
-          <span className="rounded bg-black/60 px-2 py-0.5 text-white/80 backdrop-blur-md tabular tracking-widest" suppressHydrationWarning>
-            {formatPreciseTime(now)}
-          </span>
-        </div>
-
-        {threat && (
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className={cn(
-                'relative flex max-w-[280px] flex-col items-center gap-1.5 rounded-2xl border bg-black/85 px-5 py-3 text-center backdrop-blur-xl shadow-2xl',
-                threat.severity === 'critical' ? 'border-threat/60 shadow-[0_0_30px_rgba(239,68,68,0.25)]' : 'border-warn/60 shadow-[0_0_30px_rgba(245,158,11,0.25)]',
-              )}
-            >
-              <span className={cn('flex size-9 items-center justify-center rounded-xl', threat.severity === 'critical' ? 'neon-threat' : 'neon-warn')}>
-                <Icon className="size-4" aria-hidden="true" />
-              </span>
-              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white">
-                {threat.title}
-              </span>
-              <span className={cn('tabular font-mono text-sm font-bold', threat.severity === 'critical' ? 'text-threat' : 'text-warn')}>
-                {threat.confidence.toFixed(1)}%
-              </span>
-            </motion.div>
-          </div>
+      <div className={cn('relative flex items-center justify-between gap-3 overflow-hidden px-5 py-2', t.banner)}>
+        {tone === 'threat' && (
+          <span
+            aria-hidden="true"
+            className="animate-threat-flash pointer-events-none absolute inset-0 bg-gradient-to-r from-white/30 to-transparent"
+          />
         )}
-
-        <div className={cn('absolute inset-0 pointer-events-none border-2 transition-colors duration-500', hudColor)} aria-hidden="true" />
-        <div className="absolute bottom-2 left-2 font-mono text-[10px] tracking-wider text-white/70 bg-black/50 px-1.5 py-0.5 rounded">
-          {zone.code}
-        </div>
-        <div className="absolute bottom-2 right-2 font-mono text-[10px] tracking-wider text-white/70 bg-black/50 px-1.5 py-0.5 rounded">
-          29FPS · 1080p
-        </div>
+        <span className="relative flex min-w-0 items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em]">
+          {tone === 'threat' && <Siren className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" />}
+          <span className="truncate">{bannerText}</span>
+        </span>
+        <span className="relative shrink-0 font-mono text-[10px] font-medium tracking-wider opacity-80">{incident.id}</span>
       </div>
 
-      <div className="flex items-center justify-between border-t border-border bg-black/30 px-4 py-3">
-        <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
-            Zone {zone.id}
-          </p>
-          <h3 className="truncate text-sm font-semibold tracking-tight text-white">{zone.name}</h3>
+      <div className="space-y-4 p-5">
+        <div className="flex items-start gap-3.5">
+          <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', t.tile)}>
+            <Icon className="size-[18px]" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-white">{incident.title}</h3>
+            <div className="mt-1.5 flex flex-col gap-1 font-mono text-[11px] text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <MapPin className="size-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">
+                  Zone {zone.id} · {zone.name}
+                </span>
+              </span>
+              <span className="flex items-center gap-1.5" suppressHydrationWarning>
+                <Clock className="size-3 shrink-0" aria-hidden="true" />
+                <time dateTime={new Date(incident.detectedAt).toISOString()} className="text-white/80">
+                  {formatPreciseTime(incident.detectedAt)}
+                </time>
+                <span className="opacity-70">· {formatRelative(incident.detectedAt, now)}</span>
+              </span>
+            </div>
+          </div>
         </div>
-        <NeonBadge tone={status.tone} size="sm" solid={status.solid} pulse={status.pulse}>
-          {status.label}
-        </NeonBadge>
-      </div>
 
-      <div className="grid grid-cols-3 divide-x divide-border border-t border-border bg-black/50 px-4 py-2 font-mono text-[10px]">
-        <div>
-          <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Health</p>
-          <p className="mt-0.5 flex items-center gap-1 font-semibold text-safe">
-            <span className="size-1.5 rounded-full bg-safe" aria-hidden="true" /> Online
-          </p>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">{incident.summary}</p>
+
+        <div className="rounded-xl border border-border bg-black/25 p-3.5">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground">AI Confidence</p>
+              <p className={cn('tabular mt-1 text-2xl font-bold leading-none tracking-tight', t.value)}>
+                {incident.confidence.toFixed(1)}%
+              </p>
+            </div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+              Threshold {REVIEW_THRESHOLD}%
+            </p>
+          </div>
+          <div
+            className="relative mt-3 h-1 rounded-full bg-white/[0.07]"
+            role="meter"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={incident.confidence}
+            aria-label="AI confidence score"
+          >
+            <motion.div
+              className={cn('h-full rounded-full', t.bar)}
+              initial={{ width: 0 }}
+              animate={{ width: `${incident.confidence}%` }}
+              transition={{ duration: 0.8, ease: 'easeOut' }}
+            />
+            <span
+              className="absolute -top-1 h-3 w-px bg-white/50"
+              style={{ left: `${REVIEW_THRESHOLD}%` }}
+              aria-hidden="true"
+            />
+          </div>
         </div>
-        <div className="pl-4">
-          <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Latency</p>
-          <p className="mt-0.5 font-semibold text-white/90">⚡ {zone.latency}ms</p>
+
+        <div className="flex flex-wrap gap-1.5">
+          <NeonBadge tone={sev.tone} size="xs" solid={incident.severity === 'critical' && tone === 'threat'}>
+            {sev.label}
+          </NeonBadge>
+          {incident.tags.map((tag) => (
+            <NeonBadge key={tag} tone="neutral" size="xs">
+              {tag}
+            </NeonBadge>
+          ))}
+          {closing ? (
+            <NeonBadge tone="safe" size="xs" icon={CircleCheck}>
+              Problem Resolved
+            </NeonBadge>
+          ) : resolving ? (
+            <NeonBadge tone="warn" size="xs" icon={Loader2} pulse>
+              Resolving Issue
+            </NeonBadge>
+          ) : onSite ? (
+            <NeonBadge tone="warn" size="xs" icon={Wrench}>
+              Team On-Site
+            </NeonBadge>
+          ) : dispatched ? (
+            <NeonBadge tone="warn" size="xs" icon={Truck}>
+              Units Dispatched
+            </NeonBadge>
+          ) : null}
+          {protocol && (
+            <NeonBadge tone="warn" size="xs" icon={ShieldCheck}>
+              Protocol Active
+            </NeonBadge>
+          )}
         </div>
-        <div className="pl-4">
-          <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Sensors</p>
-          <p className="truncate mt-0.5 font-semibold text-white/80">{zone.sensors}</p>
+
+        {stage >= 0 && <ResponseSteps stage={stage as 0 | 1 | 2 | 3} />}
+
+        <div className="border-t border-border pt-4">
+          {isReview ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              <ActionButton tone="threat" icon={UserCheck} onClick={() => sentinel.escalate(incident.id)}>
+                Verify & Escalate
+              </ActionButton>
+              <ActionButton tone="neutral" icon={Ban} onClick={() => sentinel.dismiss(incident.id)}>
+                Dismiss False Alarm
+              </ActionButton>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5">
+              <ActionButton
+                tone="warn"
+                icon={Truck}
+                done={dispatched}
+                doneLabel={closing ? 'Problem Resolved' : resolving ? 'Resolving Issue...' : onSite ? 'Team On-Site' : 'Units Dispatched'}
+                onClick={() => sentinel.dispatch(incident.id)}
+              >
+                Dispatch Quick Response Team
+              </ActionButton>
+              <ActionButton
+                tone="warn"
+                icon={Lock}
+                done={protocol}
+                doneLabel="Protocol Active"
+                onClick={() => sentinel.protocol(incident.id)}
+              >
+                Trigger Warning / Lockdown
+              </ActionButton>
+              <ActionButton
+                tone="safe"
+                icon={CircleCheck}
+                done={closing}
+                doneLabel="Problem Resolved"
+                onClick={() => sentinel.resolve(incident.id)}
+                className="col-span-2"
+              >
+                Resolve Incident
+              </ActionButton>
+            </div>
+          )}
         </div>
       </div>
-    </article>
+    </motion.article>
+  )
+}
+
+const ACTION_TONES = {
+  threat:
+    'border-threat/45 bg-gradient-to-b from-threat/30 to-threat/10 text-white hover:border-threat hover:from-threat hover:to-threat/80 hover:shadow-[0_0_26px_-6px_var(--threat)]',
+  warn: 'border-warn/30 bg-gradient-to-b from-warn/15 to-warn/[0.04] text-warn hover:border-warn/60 hover:from-warn/25 hover:to-warn/10 hover:shadow-[0_0_24px_-8px_var(--warn)]',
+  safe: 'border-safe/30 bg-gradient-to-b from-safe/15 to-safe/[0.04] text-safe hover:border-safe/60 hover:from-safe/25 hover:to-safe/10 hover:shadow-[0_0_24px_-8px_var(--safe)]',
+  neutral:
+    'border-border bg-gradient-to-b from-white/[0.06] to-white/[0.02] text-white/85 hover:border-white/20 hover:from-white/[0.1] hover:text-white',
+} as const
+
+function ActionButton({
+  tone,
+  icon: Icon,
+  onClick,
+  children,
+  done,
+  doneLabel,
+  className,
+}: {
+  tone: keyof typeof ACTION_TONES
+  icon: React.ComponentType<{ className?: string }>
+  onClick: () => void
+  children: React.ReactNode
+  done?: boolean
+  doneLabel?: string
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={done}
+      className={cn(
+        'flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-center text-xs font-semibold leading-tight transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 enabled:active:scale-[0.98]',
+        done
+          ? tone === 'safe'
+            ? 'cursor-default border-safe/40 bg-safe/15 text-safe'
+            : 'cursor-default border-warn/25 bg-warn/[0.06] text-warn/75'
+          : ACTION_TONES[tone],
+        className,
+      )}
+    >
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <span>{done ? doneLabel : children}</span>
+    </button>
+  )
+}
+
+const RESPONSE_STEPS = ['Units Dispatched', 'Team On-Site', 'Resolving Issue', 'Problem Resolved'] as const
+
+function ResponseSteps({ stage }: { stage: 0 | 1 | 2 | 3 }) {
+  return (
+    <div className="rounded-xl border border-border bg-black/25 px-4 py-3.5" role="list" aria-label="Response progress">
+      <div className="flex items-center">
+        {RESPONSE_STEPS.map((label, i) => {
+          const reached = i <= stage
+          const current = i === stage && stage < 3
+          const done = i === 3 && stage === 3
+          return (
+            <div key={label} role="listitem" aria-label={label} className={cn('flex items-center', i < 3 && 'flex-1')}>
+              <span
+                className={cn(
+                  'size-2.5 shrink-0 rounded-full transition-all duration-500',
+                  !reached && 'bg-white/15',
+                  reached && !done && 'bg-warn shadow-[0_0_10px_var(--warn)]',
+                  done && 'bg-safe shadow-[0_0_10px_var(--safe)]',
+                  current && 'animate-pulse',
+                )}
+              />
+              {i < 3 && (
+                <span className="relative mx-2 h-px flex-1 overflow-hidden bg-white/10">
+                  <motion.span
+                    className="absolute inset-y-0 left-0 bg-warn/70"
+                    initial={false}
+                    animate={{ width: i < stage ? '100%' : '0%' }}
+                    transition={{ duration: 0.7, ease: 'easeOut' }}
+                  />
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-2 flex justify-between gap-2 font-mono text-[9px] font-semibold uppercase tracking-[0.12em]">
+        {RESPONSE_STEPS.map((label, i) => (
+          <span key={label} className={cn(i <= stage ? (i === 3 ? 'text-safe' : 'text-warn') : 'text-muted-foreground/60')}>
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
   )
 }
