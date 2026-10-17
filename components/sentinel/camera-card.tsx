@@ -1,10 +1,10 @@
 'use client'
 
 import { motion } from 'motion/react'
-import { Activity, ShieldAlert, Video } from 'lucide-react'
+import { Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPreciseTime, SEVERITY_STYLES, THREAT_ICONS } from '@/lib/sentinel/format'
-import { ZONES, type Zone } from '@/lib/sentinel/scenarios'
+import { type Zone } from '@/lib/sentinel/scenarios'
 import type { Incident } from '@/lib/sentinel/types'
 import { NeonBadge, type Tone } from './neon-badge'
 
@@ -20,7 +20,6 @@ export function CameraCard({
   reviewCount: number
 }) {
   const Icon = threat ? THREAT_ICONS[threat.type] : Video
-  const sev = threat ? SEVERITY_STYLES[threat.severity] : null
 
   const dispatched = Boolean(threat?.dispatchedAt)
   const onSite = Boolean(threat?.onSiteAt)
@@ -29,9 +28,9 @@ export function CameraCard({
 
   const status: { label: string; tone: Tone; solid?: boolean; pulse?: boolean } = threat
     ? closing
-      ? { label: 'Resolved', tone: 'safe' }
+      ? { label: 'Problem Resolved', tone: 'safe' }
       : onSite
-        ? { label: 'On-Site', tone: 'warn', pulse: true }
+        ? { label: 'Team On-Site', tone: 'warn', pulse: true }
         : contained
           ? { label: 'Units Dispatched', tone: 'warn', pulse: true }
           : { label: 'Threat', tone: 'threat', solid: true, pulse: true }
