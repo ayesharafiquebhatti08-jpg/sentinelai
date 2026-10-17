@@ -8,6 +8,7 @@ import { formatDateTime, formatDuration, formatTime, SEVERITY_STYLES, THREAT_ICO
 import { SCENARIOS, ZONES } from '@/lib/sentinel/scenarios'
 import { sentinel } from '@/lib/sentinel/store'
 import type { Incident, Resolution } from '@/lib/sentinel/types'
+import { NeonBadge } from './neon-badge'
 
 type ResFilter = 'all' | Resolution
 
@@ -71,15 +72,15 @@ export function AuditLog({ audit }: { audit: Incident[] }) {
           { label: 'False Alarms Filtered', value: falseCount },
           { label: 'Avg. Time to Close', value: durations.length ? formatDuration(avgMs) : '—' },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-card/70 p-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{s.label}</p>
-            <p className="tabular mt-1.5 text-2xl font-semibold">{s.value}</p>
+          <div key={s.label} className="panel rounded-2xl p-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{s.label}</p>
+            <p className="tabular mt-3 text-3xl font-bold tracking-tight text-white">{s.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card/50">
-        <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="panel overflow-hidden rounded-2xl">
+        <div className="flex flex-col gap-4 border-b border-border p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 id="audit-heading" className="flex items-center gap-2 text-sm font-semibold">
               <Archive className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -155,13 +156,13 @@ export function AuditLog({ audit }: { audit: Incident[] }) {
           <table className="w-full min-w-[760px] text-left text-xs">
             <thead className="border-b border-border bg-background/40 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th scope="col" className="px-4 py-2.5 font-medium">Incident</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">Zone</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">Detected</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">Confidence</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">Actions Taken</th>
-                <th scope="col" className="px-4 py-2.5 font-medium">Outcome</th>
-                <th scope="col" className="px-4 py-2.5"><span className="sr-only">Details</span></th>
+                <th scope="col" className="px-5 py-3 font-medium">Incident</th>
+                <th scope="col" className="px-5 py-3 font-medium">Zone</th>
+                <th scope="col" className="px-5 py-3 font-medium">Detected</th>
+                <th scope="col" className="px-5 py-3 font-medium">Confidence</th>
+                <th scope="col" className="px-5 py-3 font-medium">Actions Taken</th>
+                <th scope="col" className="px-5 py-3 font-medium">Outcome</th>
+                <th scope="col" className="px-5 py-3"><span className="sr-only">Details</span></th>
               </tr>
             </thead>
             <tbody>
@@ -173,7 +174,7 @@ export function AuditLog({ audit }: { audit: Incident[] }) {
                 return (
                   <Fragment key={r.id}>
                     <tr className="border-b border-border/60 transition-colors hover:bg-muted/30">
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         <div className="flex items-center gap-2.5">
                           <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground">
                             <Icon className="size-3.5" aria-hidden="true" />
@@ -184,21 +185,21 @@ export function AuditLog({ audit }: { audit: Incident[] }) {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="px-5 py-4 text-muted-foreground">
                         <span className="font-mono text-foreground">{r.zoneId}</span> · {ZONES[r.zoneId].name}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-muted-foreground tabular">
+                      <td className="whitespace-nowrap px-5 py-4 font-mono text-muted-foreground tabular">
                         {formatDateTime(r.detectedAt)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
                           <span className="tabular font-mono">{r.confidence.toFixed(1)}%</span>
-                          <span className={cn('rounded border px-1 py-px font-mono text-[9px] font-semibold', sev.className)}>
+                          <NeonBadge tone={sev.tone} size="xs">
                             {sev.label.split(' ')[0]}
-                          </span>
+                          </NeonBadge>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         <div className="flex flex-wrap gap-1">
                           {responseActions.length === 0 ? (
                             <span className="text-muted-foreground">Manual review only</span>
@@ -211,15 +212,15 @@ export function AuditLog({ audit }: { audit: Incident[] }) {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         {r.resolution === 'false-alarm' ? (
-                          <span className="rounded border border-info/35 bg-info/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-info">
-                            FALSE ALARM
-                          </span>
+                          <NeonBadge tone="info" size="xs" dot>
+                            False Alarm
+                          </NeonBadge>
                         ) : (
-                          <span className="rounded border border-safe/35 bg-safe/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-safe">
-                            RESOLVED
-                          </span>
+                          <NeonBadge tone="safe" size="xs" dot>
+                            Resolved
+                          </NeonBadge>
                         )}
                         {r.resolvedAt && (
                           <p className="mt-1 font-mono text-[10px] text-muted-foreground">
@@ -227,7 +228,7 @@ export function AuditLog({ audit }: { audit: Incident[] }) {
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-5 py-4 text-right">
                         <button
                           type="button"
                           onClick={() => setExpanded(open ? null : r.id)}

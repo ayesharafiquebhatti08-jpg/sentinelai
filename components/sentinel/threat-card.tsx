@@ -7,34 +7,32 @@ import { formatPreciseTime, formatRelative, SEVERITY_STYLES, THREAT_ICONS } from
 import { REVIEW_THRESHOLD, SCENARIOS, ZONES } from '@/lib/sentinel/scenarios'
 import { sentinel } from '@/lib/sentinel/store'
 import type { Incident } from '@/lib/sentinel/types'
+import { NeonBadge } from './neon-badge'
 
-function ConfidenceMeter({ value }: { value: number }) {
-  const tone = value < REVIEW_THRESHOLD ? 'bg-info' : value < 85 ? 'bg-warn' : 'bg-threat'
-  return (
-    <div className="flex items-center gap-2">
-      <div
-        className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
-        role="meter"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={value}
-        aria-label="AI confidence score"
-      >
-        <motion.div
-          className={cn('h-full rounded-full', tone)}
-          initial={{ width: 0 }}
-          animate={{ width: `${value}%` }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
-        />
-        <div
-          className="absolute inset-y-0 w-px bg-foreground/50"
-          style={{ left: `${REVIEW_THRESHOLD}%` }}
-          aria-hidden="true"
-        />
-      </div>
-      <span className="tabular font-mono text-xs font-semibold">{value.toFixed(1)}%</span>
-    </div>
-  )
+type CardTone = 'threat' | 'warn' | 'info'
+
+const TONE_STYLES: Record<CardTone, { accent: string; tile: string; value: string; bar: string; banner: string }> = {
+  threat: {
+    accent: 'bg-threat shadow-[0_0_14px_var(--threat)]',
+    tile: 'neon-threat',
+    value: 'text-threat text-glow-threat',
+    bar: 'bg-threat shadow-[0_0_10px_var(--threat)]',
+    banner: 'bg-gradient-to-r from-threat via-threat/85 to-threat/45 text-white',
+  },
+  warn: {
+    accent: 'bg-warn shadow-[0_0_14px_var(--warn)]',
+    tile: 'neon-warn',
+    value: 'text-warn',
+    bar: 'bg-warn shadow-[0_0_10px_var(--warn)]',
+    banner: 'border-b border-warn/20 bg-warn/[0.08] text-warn',
+  },
+  info: {
+    accent: 'bg-info shadow-[0_0_14px_var(--info)]',
+    tile: 'neon-info',
+    value: 'text-info',
+    bar: 'bg-info shadow-[0_0_10px_var(--info)]',
+    banner: 'border-b border-info/20 bg-info/[0.08] text-info',
+  },
 }
 
 export function ThreatCard({ incident, now }: { incident: Incident; now: number }) {
@@ -45,12 +43,14 @@ export function ThreatCard({ incident, now }: { incident: Incident; now: number 
   const dispatched = Boolean(incident.dispatchedAt)
   const protocol = Boolean(incident.protocolAt)
   const contained = dispatched || protocol
+  const tone: CardTone = isReview ? 'info' : contained ? 'warn' : 'threat'
+  const t = TONE_STYLES[tone]
 
-  const banner = isReview
-    ? { text: 'LOW CONFIDENCE · AWAITING HUMAN VERIFICATION', className: 'bg-info/15 text-info' }
+  const bannerText = isReview
+    ? 'Low Confidence · Awaiting Human Verification'
     : contained
-      ? { text: 'RESPONSE IN PROGRESS', className: 'bg-warn/15 text-warn' }
-      : { text: `CRITICAL ALERT · ${SCENARIOS[incident.type].alertLabel.toUpperCase()}`, className: 'bg-threat text-white' }
+      ? 'Response In Progress'
+      : `Critical Alert · ${SCENARIOS[incident.type].alertLabel}`
 
   return (
     <motion.article
@@ -60,125 +60,163 @@ export function ThreatCard({ incident, now }: { incident: Incident; now: number 
       exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }}
       transition={{ type: 'spring', stiffness: 320, damping: 30 }}
       className={cn(
-        'overflow-hidden rounded-xl border bg-card',
-        isReview ? 'border-info/25' : contained ? 'border-warn/40' : 'border-threat/50 glow-threat',
+        'panel relative overflow-hidden rounded-2xl',
+        tone === 'threat' && 'panel-alert',
+        tone === 'warn' && 'panel-warn',
       )}
       aria-label={`${incident.title} in Zone ${incident.zoneId}`}
     >
-      <div className={cn('flex items-center justify-between gap-2 px-3.5 py-1.5', banner.className)}>
-        <span className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] font-semibold tracking-[0.14em]">
-          {!isReview && !contained && <Siren className="size-3 shrink-0 animate-pulse" aria-hidden="true" />}
-          <span className="truncate">{banner.text}</span>
+      <span aria-hidden="true" className={cn('absolute inset-y-0 left-0 z-10 w-[3px]', t.accent)} />
+
+      <div className={cn('relative flex items-center justify-between gap-3 overflow-hidden px-5 py-2', t.banner)}>
+        {tone === 'threat' && (
+          <span
+            aria-hidden="true"
+            className="animate-threat-flash pointer-events-none absolute inset-0 bg-gradient-to-r from-white/30 to-transparent"
+          />
+        )}
+        <span className="relative flex min-w-0 items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em]">
+          {tone === 'threat' && <Siren className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" />}
+          <span className="truncate">{bannerText}</span>
         </span>
-        <span className="shrink-0 font-mono text-[10px] opacity-80">{incident.id}</span>
+        <span className="relative shrink-0 font-mono text-[10px] font-medium tracking-wider opacity-80">{incident.id}</span>
       </div>
 
-      <div className="space-y-3 p-3.5">
-        <div className="flex items-start gap-3">
-          <span
-            className={cn(
-              'flex size-9 shrink-0 items-center justify-center rounded-lg border',
-              isReview ? 'border-info/30 bg-info/10 text-info' : 'border-threat/30 bg-threat/10 text-threat',
-            )}
-          >
-            <Icon className="size-4.5" aria-hidden="true" />
+      <div className="space-y-4 p-5">
+        <div className="flex items-start gap-3.5">
+          <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', t.tile)}>
+            <Icon className="size-[18px]" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold leading-snug">{incident.title}</h3>
-            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <MapPin className="size-3" aria-hidden="true" />
-                Zone {zone.id} · {zone.name}
+            <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-white">{incident.title}</h3>
+            <div className="mt-1.5 flex flex-col gap-1 font-mono text-[11px] text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <MapPin className="size-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">
+                  Zone {zone.id} · {zone.name}
+                </span>
               </span>
-              <span className="flex items-center gap-1" suppressHydrationWarning>
-                <Clock className="size-3" aria-hidden="true" />
-                <time dateTime={new Date(incident.detectedAt).toISOString()}>{formatPreciseTime(incident.detectedAt)}</time>
-                <span className="opacity-70">({formatRelative(incident.detectedAt, now)})</span>
+              <span className="flex items-center gap-1.5" suppressHydrationWarning>
+                <Clock className="size-3 shrink-0" aria-hidden="true" />
+                <time dateTime={new Date(incident.detectedAt).toISOString()} className="text-white/80">
+                  {formatPreciseTime(incident.detectedAt)}
+                </time>
+                <span className="opacity-70">· {formatRelative(incident.detectedAt, now)}</span>
               </span>
-            </p>
+            </div>
           </div>
         </div>
 
-        <p className="text-xs leading-relaxed text-muted-foreground">{incident.summary}</p>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">{incident.summary}</p>
 
-        <div>
-          <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            <span>AI Confidence</span>
-            <span>Threshold {REVIEW_THRESHOLD}%</span>
+        <div className="rounded-xl border border-border bg-black/25 p-3.5">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground">AI Confidence</p>
+              <p className={cn('tabular mt-1 text-2xl font-bold leading-none tracking-tight', t.value)}>
+                {incident.confidence.toFixed(1)}%
+              </p>
+            </div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+              Threshold {REVIEW_THRESHOLD}%
+            </p>
           </div>
-          <ConfidenceMeter value={incident.confidence} />
+          <div
+            className="relative mt-3 h-1 rounded-full bg-white/[0.07]"
+            role="meter"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={incident.confidence}
+            aria-label="AI confidence score"
+          >
+            <motion.div
+              className={cn('h-full rounded-full', t.bar)}
+              initial={{ width: 0 }}
+              animate={{ width: `${incident.confidence}%` }}
+              transition={{ duration: 0.8, ease: 'easeOut' }}
+            />
+            <span
+              className="absolute -top-1 h-3 w-px bg-white/50"
+              style={{ left: `${REVIEW_THRESHOLD}%` }}
+              aria-hidden="true"
+            />
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          <span className={cn('rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider', sev.className)}>
+          <NeonBadge tone={sev.tone} size="xs" solid={incident.severity === 'critical' && tone === 'threat'}>
             {sev.label}
-          </span>
-          {incident.tags.map((t) => (
-            <span
-              key={t}
-              className="rounded border border-border bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-muted-foreground"
-            >
-              {t}
-            </span>
+          </NeonBadge>
+          {incident.tags.map((tag) => (
+            <NeonBadge key={tag} tone="neutral" size="xs">
+              {tag}
+            </NeonBadge>
           ))}
           {dispatched && (
-            <span className="flex items-center gap-1 rounded border border-warn/40 bg-warn/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider text-warn">
-              <Truck className="size-3" aria-hidden="true" />
-              UNITS DEPLOYED
-            </span>
+            <NeonBadge tone="warn" size="xs" icon={Truck}>
+              Units Deployed
+            </NeonBadge>
           )}
           {protocol && (
-            <span className="flex items-center gap-1 rounded border border-warn/40 bg-warn/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider text-warn">
-              <ShieldCheck className="size-3" aria-hidden="true" />
-              PROTOCOL ACTIVE
-            </span>
+            <NeonBadge tone="warn" size="xs" icon={ShieldCheck}>
+              Protocol Active
+            </NeonBadge>
           )}
         </div>
 
-        {isReview ? (
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <ActionButton tone="threat" icon={UserCheck} onClick={() => sentinel.escalate(incident.id)}>
-              Verify & Escalate
-            </ActionButton>
-            <ActionButton tone="neutral" icon={Ban} onClick={() => sentinel.dismiss(incident.id)}>
-              Dismiss False Alarm
-            </ActionButton>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-3">
-            <ActionButton
-              tone="warn"
-              icon={Truck}
-              done={dispatched}
-              doneLabel="Units Deployed"
-              onClick={() => sentinel.dispatch(incident.id)}
-            >
-              Dispatch Quick Response Team
-            </ActionButton>
-            <ActionButton
-              tone="warn"
-              icon={Lock}
-              done={protocol}
-              doneLabel="Protocol Active"
-              onClick={() => sentinel.protocol(incident.id)}
-            >
-              Trigger Warning / Lockdown
-            </ActionButton>
-            <ActionButton tone="safe" icon={CircleCheck} onClick={() => sentinel.resolve(incident.id)}>
-              Resolve Incident
-            </ActionButton>
-          </div>
-        )}
+        <div className="border-t border-border pt-4">
+          {isReview ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              <ActionButton tone="threat" icon={UserCheck} onClick={() => sentinel.escalate(incident.id)}>
+                Verify & Escalate
+              </ActionButton>
+              <ActionButton tone="neutral" icon={Ban} onClick={() => sentinel.dismiss(incident.id)}>
+                Dismiss False Alarm
+              </ActionButton>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5">
+              <ActionButton
+                tone="warn"
+                icon={Truck}
+                done={dispatched}
+                doneLabel="Units Deployed"
+                onClick={() => sentinel.dispatch(incident.id)}
+              >
+                Dispatch Quick Response Team
+              </ActionButton>
+              <ActionButton
+                tone="warn"
+                icon={Lock}
+                done={protocol}
+                doneLabel="Protocol Active"
+                onClick={() => sentinel.protocol(incident.id)}
+              >
+                Trigger Warning / Lockdown
+              </ActionButton>
+              <ActionButton
+                tone="safe"
+                icon={CircleCheck}
+                onClick={() => sentinel.resolve(incident.id)}
+                className="col-span-2"
+              >
+                Resolve Incident
+              </ActionButton>
+            </div>
+          )}
+        </div>
       </div>
     </motion.article>
   )
 }
 
 const ACTION_TONES = {
-  threat: 'border-threat/40 bg-threat/10 text-threat hover:bg-threat hover:text-white',
-  warn: 'border-warn/35 bg-warn/10 text-warn hover:bg-warn hover:text-background',
-  safe: 'border-safe/35 bg-safe/10 text-safe hover:bg-safe hover:text-background',
-  neutral: 'border-border bg-muted/50 text-foreground/80 hover:bg-muted hover:text-foreground',
+  threat:
+    'border-threat/45 bg-gradient-to-b from-threat/30 to-threat/10 text-white hover:border-threat hover:from-threat hover:to-threat/80 hover:shadow-[0_0_26px_-6px_var(--threat)]',
+  warn: 'border-warn/30 bg-gradient-to-b from-warn/15 to-warn/[0.04] text-warn hover:border-warn/60 hover:from-warn/25 hover:to-warn/10 hover:shadow-[0_0_24px_-8px_var(--warn)]',
+  safe: 'border-safe/30 bg-gradient-to-b from-safe/15 to-safe/[0.04] text-safe hover:border-safe/60 hover:from-safe/25 hover:to-safe/10 hover:shadow-[0_0_24px_-8px_var(--safe)]',
+  neutral:
+    'border-border bg-gradient-to-b from-white/[0.06] to-white/[0.02] text-white/85 hover:border-white/20 hover:from-white/[0.1] hover:text-white',
 } as const
 
 function ActionButton({
@@ -188,6 +226,7 @@ function ActionButton({
   children,
   done,
   doneLabel,
+  className,
 }: {
   tone: keyof typeof ACTION_TONES
   icon: React.ComponentType<{ className?: string }>
@@ -195,6 +234,7 @@ function ActionButton({
   children: React.ReactNode
   done?: boolean
   doneLabel?: string
+  className?: string
 }) {
   return (
     <button
@@ -202,13 +242,12 @@ function ActionButton({
       onClick={onClick}
       disabled={done}
       className={cn(
-        'flex min-h-9 items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-center text-[11px] font-medium leading-tight transition-colors focus-visible:outline-2',
-        done
-          ? 'cursor-default border-warn/30 bg-warn/5 text-warn/70'
-          : ACTION_TONES[tone],
+        'flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-center text-xs font-semibold leading-tight transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 enabled:active:scale-[0.98]',
+        done ? 'cursor-default border-warn/25 bg-warn/[0.06] text-warn/75' : ACTION_TONES[tone],
+        className,
       )}
     >
-      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
       <span>{done ? doneLabel : children}</span>
     </button>
   )

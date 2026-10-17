@@ -80,21 +80,9 @@ export const THREAT_ICONS: Record<ThreatType, LucideIcon> = {
   violence: Users,
 }
 
-export const SEVERITY_STYLES: Record<Severity, { label: string; className: string }> = {
-  critical: {
-    label: 'CRITICAL',
-    className: 'bg-threat/15 text-threat border-threat/40',
-  },
-  high: {
-    label: 'HIGH',
-    className: 'bg-orange-500/15 text-orange-400 border-orange-500/40',
-  },
-  medium: {
-    label: 'MEDIUM',
-    className: 'bg-warn/15 text-warn border-warn/40',
-  },
-  low: {
-    label: 'LOW · REVIEW',
-    className: 'bg-info/10 text-info border-info/35',
-  },
+export const SEVERITY_STYLES: Record<Severity, { label: string; tone: 'threat' | 'warn' | 'info' }> = {
+  critical: { label: 'CRITICAL', tone: 'threat' },
+  high: { label: 'HIGH', tone: 'threat' },
+  medium: { label: 'MEDIUM', tone: 'warn' },
+  low: { label: 'LOW · REVIEW', tone: 'info' },
 }

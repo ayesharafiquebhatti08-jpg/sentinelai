@@ -6,6 +6,7 @@ import { Inbox, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { REVIEW_THRESHOLD } from '@/lib/sentinel/scenarios'
 import type { Incident } from '@/lib/sentinel/types'
+import { NeonBadge } from './neon-badge'
 import { ThreatCard } from './threat-card'
 
 type Filter = 'all' | 'critical' | 'review'
@@ -16,10 +17,10 @@ export function ThreatFeed({ incidents, now }: { incidents: Incident[]; now: num
   const critical = incidents.filter((i) => i.queue === 'active')
   const review = incidents.filter((i) => i.queue === 'review')
 
-  const tabs: { id: Filter; label: string; count: number; activeClass: string }[] = [
-    { id: 'all', label: 'All Alerts', count: incidents.length, activeClass: 'bg-foreground text-background' },
-    { id: 'critical', label: 'Critical Threats', count: critical.length, activeClass: 'bg-threat text-white' },
-    { id: 'review', label: 'Low-Priority / Review', count: review.length, activeClass: 'bg-info text-background' },
+  const tabs: { id: Filter; label: string; count: number; countClass: string }[] = [
+    { id: 'all', label: 'All Alerts', count: incidents.length, countClass: 'text-white' },
+    { id: 'critical', label: 'Critical Threats', count: critical.length, countClass: 'text-threat text-glow-threat' },
+    { id: 'review', label: 'Low-Priority / Review', count: review.length, countClass: 'text-info' },
   ]
 
   const visible = filter === 'all' ? incidents : filter === 'critical' ? critical : review
@@ -27,64 +28,76 @@ export function ThreatFeed({ incidents, now }: { incidents: Incident[]; now: num
   return (
     <section
       aria-labelledby="feed-heading"
-      className="flex min-h-[520px] flex-col overflow-hidden rounded-xl border border-border bg-card/50 xl:h-[calc(100vh-7.5rem)] xl:min-h-0"
+      className="panel flex min-h-[560px] flex-col overflow-hidden rounded-2xl xl:h-[calc(100vh-6.5rem)] xl:min-h-0"
     >
-      <div className="border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 id="feed-heading" className="flex items-center gap-2 text-sm font-semibold">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-threat opacity-75" />
-              <span className="relative inline-flex size-2 rounded-full bg-threat" />
-            </span>
-            Live Threat Detection & Triage
-          </h2>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Real-time</span>
+      <div className="border-b border-border p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="feed-heading" className="text-[15px] font-semibold tracking-tight text-white">
+              Live Threat Detection & Triage
+            </h2>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+              AI triage · {critical.length} open · {review.length} queued
+            </p>
+          </div>
+          <NeonBadge tone="threat" dot pulse size="xs">
+            Live
+          </NeonBadge>
         </div>
 
-        <div role="tablist" aria-label="Filter alerts" className="mt-3 flex gap-1 overflow-x-auto rounded-lg bg-background/60 p-1">
-          {tabs.map((t) => {
-            const selected = filter === t.id
+        <div role="tablist" aria-label="Filter alerts" className="mt-4 grid grid-cols-3 gap-1 rounded-xl border border-border bg-black/30 p-1">
+          {tabs.map((tab) => {
+            const selected = filter === tab.id
             return (
               <button
-                key={t.id}
+                key={tab.id}
                 role="tab"
                 type="button"
                 aria-selected={selected}
-                onClick={() => setFilter(t.id)}
+                onClick={() => setFilter(tab.id)}
                 className={cn(
-                  'relative flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                  selected ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  'relative flex flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-left transition-colors focus-visible:outline-2',
+                  selected ? 'text-white' : 'text-muted-foreground hover:text-white',
                 )}
               >
                 {selected && (
                   <motion.span
                     layoutId="feed-tab"
-                    className="absolute inset-0 rounded-md border border-border bg-card"
+                    className="absolute inset-0 rounded-lg bg-white/[0.06] ring-1 ring-inset ring-white/10"
                     transition={{ type: 'spring', stiffness: 400, damping: 34 }}
                   />
                 )}
-                <span className="relative">{t.label}</span>
                 <span
                   className={cn(
-                    'relative min-w-5 rounded px-1 font-mono text-[10px] tabular',
-                    t.count > 0 ? t.activeClass : 'bg-muted text-muted-foreground',
+                    'tabular relative text-xl font-bold leading-none tracking-tight',
+                    tab.count > 0 ? tab.countClass : 'text-muted-foreground/60',
                   )}
                 >
-                  {t.count}
+                  {tab.count}
+                </span>
+                <span className="relative font-mono text-[9px] font-medium uppercase leading-tight tracking-[0.14em]">
+                  {tab.label}
                 </span>
               </button>
             )
           })}
         </div>
 
-        {filter === 'review' && (
-          <p className="mt-2.5 rounded-md border border-info/20 bg-info/5 px-2.5 py-2 text-[11px] leading-relaxed text-info/90">
-            {`Detections below ${REVIEW_THRESHOLD}% confidence are auto-routed here instead of triggering a full alert. A human operator verifies footage before any escalation.`}
-          </p>
-        )}
+        <AnimatePresence initial={false}>
+          {filter === 'review' && (
+            <motion.p
+              initial={{ height: 0, opacity: 0, marginTop: 0 }}
+              animate={{ height: 'auto', opacity: 1, marginTop: 12 }}
+              exit={{ height: 0, opacity: 0, marginTop: 0 }}
+              className="overflow-hidden rounded-xl border border-info/25 bg-info/[0.06] px-3.5 py-2.5 text-xs leading-relaxed text-info/90"
+            >
+              {`Detections below ${REVIEW_THRESHOLD}% confidence are auto-routed here instead of triggering a full alert. A human operator verifies footage before any escalation.`}
+            </motion.p>
+          )}
+        </AnimatePresence>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-3" aria-live="polite">
+      <div className="flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
         <AnimatePresence initial={false} mode="popLayout">
           {visible.map((i) => (
             <ThreatCard key={i.id} incident={i} now={now} />
@@ -95,17 +108,21 @@ export function ThreatFeed({ incidents, now }: { incidents: Incident[]; now: num
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex h-full min-h-60 flex-col items-center justify-center gap-3 text-center"
+            className="flex h-full min-h-64 flex-col items-center justify-center gap-4 text-center"
           >
-            <span className="flex size-12 items-center justify-center rounded-full border border-safe/25 bg-safe/10 text-safe">
-              {filter === 'review' ? <Inbox className="size-5" aria-hidden="true" /> : <ShieldCheck className="size-5" aria-hidden="true" />}
+            <span className="neon-safe flex size-14 items-center justify-center rounded-2xl">
+              {filter === 'review' ? (
+                <Inbox className="size-6" aria-hidden="true" />
+              ) : (
+                <ShieldCheck className="size-6" aria-hidden="true" />
+              )}
             </span>
             <div>
-              <p className="text-sm font-medium">
+              <p className="text-sm font-semibold text-white">
                 {filter === 'review' ? 'Review queue is empty' : 'All zones secure'}
               </p>
-              <p className="mt-1 max-w-64 text-xs text-muted-foreground">
-                Use the simulation panel to inject a test threat into the AI pipeline.
+              <p className="mx-auto mt-1.5 max-w-64 text-xs leading-relaxed text-muted-foreground">
+                Use the simulation controls to inject a test threat into the AI pipeline.
               </p>
             </div>
           </motion.div>
