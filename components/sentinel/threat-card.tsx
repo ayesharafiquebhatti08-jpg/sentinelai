@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'motion/react'
-import { Ban, CircleCheck, Clock, Lock, MapPin, ShieldCheck, Siren, Truck, UserCheck } from 'lucide-react'
+import { Ban, CircleCheck, Clock, Lock, MapPin, ShieldCheck, Siren, Truck, UserCheck, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPreciseTime, formatRelative, SEVERITY_STYLES, THREAT_ICONS } from '@/lib/sentinel/format'
 import { REVIEW_THRESHOLD, SCENARIOS, ZONES } from '@/lib/sentinel/scenarios'
@@ -9,7 +9,7 @@ import { sentinel } from '@/lib/sentinel/store'
 import type { Incident } from '@/lib/sentinel/types'
 import { NeonBadge } from './neon-badge'
 
-type CardTone = 'threat' | 'warn' | 'info'
+type CardTone = 'threat' | 'warn' | 'info' | 'safe'
 
 const TONE_STYLES: Record<CardTone, { accent: string; tile: string; value: string; bar: string; banner: string }> = {
   threat: {
@@ -25,6 +25,13 @@ const TONE_STYLES: Record<CardTone, { accent: string; tile: string; value: strin
     value: 'text-warn',
     bar: 'bg-warn shadow-[0_0_10px_var(--warn)]',
     banner: 'border-b border-warn/20 bg-warn/[0.08] text-warn',
+  },
+  safe: {
+    accent: 'bg-safe shadow-[0_0_14px_var(--safe)]',
+    tile: 'neon-safe',
+    value: 'text-safe',
+    bar: 'bg-safe shadow-[0_0_10px_var(--safe)]',
+    banner: 'border-b border-safe/20 bg-safe/[0.08] text-safe',
   },
   info: {
     accent: 'bg-info shadow-[0_0_14px_var(--info)]',
@@ -42,15 +49,23 @@ export function ThreatCard({ incident, now }: { incident: Incident; now: number 
   const isReview = incident.queue === 'review'
   const dispatched = Boolean(incident.dispatchedAt)
   const protocol = Boolean(incident.protocolAt)
+  const onSite = Boolean(incident.onSiteAt)
+  const closing = Boolean(incident.closingAt)
   const contained = dispatched || protocol
-  const tone: CardTone = isReview ? 'info' : contained ? 'warn' : 'threat'
+  const tone: CardTone = isReview ? 'info' : closing ? 'safe' : contained ? 'warn' : 'threat'
   const t = TONE_STYLES[tone]
 
   const bannerText = isReview
     ? 'Low Confidence · Awaiting Human Verification'
-    : contained
-      ? 'Response In Progress'
-      : `Critical Alert · ${SCENARIOS[incident.type].alertLabel}`
+    : closing
+      ? 'Problem Resolved · Archiving to Audit Log'
+      : onSite
+        ? 'Team On-Site · Response In Progress'
+        : dispatched
+          ? 'Units Dispatched · Response In Progress'
+          : contained
+            ? 'Response In Progress'
+            : `Critical Alert · ${SCENARIOS[incident.type].alertLabel}`
 
   return (
     <motion.article
@@ -152,17 +167,27 @@ export function ThreatCard({ incident, now }: { incident: Incident; now: number 
               {tag}
             </NeonBadge>
           ))}
-          {dispatched && (
-            <NeonBadge tone="warn" size="xs" icon={Truck}>
-              Units Deployed
+          {closing ? (
+            <NeonBadge tone="safe" size="xs" icon={CircleCheck}>
+              Problem Resolved
             </NeonBadge>
-          )}
+          ) : onSite ? (
+            <NeonBadge tone="warn" size="xs" icon={Wrench}>
+              Team On-Site &amp; Working
+            </NeonBadge>
+          ) : dispatched ? (
+            <NeonBadge tone="warn" size="xs" icon={Truck}>
+              Units Dispatched
+            </NeonBadge>
+          ) : null}
           {protocol && (
             <NeonBadge tone="warn" size="xs" icon={ShieldCheck}>
               Protocol Active
             </NeonBadge>
           )}
         </div>
+
+        {dispatched && <ResponseSteps stage={closing ? 2 : onSite ? 1 : 0} />}
 
         <div className="border-t border-border pt-4">
           {isReview ? (
@@ -180,7 +205,7 @@ export function ThreatCard({ incident, now }: { incident: Incident; now: number 
                 tone="warn"
                 icon={Truck}
                 done={dispatched}
-                doneLabel="Units Deployed"
+                doneLabel={onSite ? 'Team On-Site & Working' : 'Units Dispatched'}
                 onClick={() => sentinel.dispatch(incident.id)}
               >
                 Dispatch Quick Response Team
@@ -197,6 +222,8 @@ export function ThreatCard({ incident, now }: { incident: Incident; now: number 
               <ActionButton
                 tone="safe"
                 icon={CircleCheck}
+                done={closing}
+                doneLabel="Problem Resolved"
                 onClick={() => sentinel.resolve(incident.id)}
                 className="col-span-2"
               >
@@ -243,12 +270,62 @@ function ActionButton({
       disabled={done}
       className={cn(
         'flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-center text-xs font-semibold leading-tight transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 enabled:active:scale-[0.98]',
-        done ? 'cursor-default border-warn/25 bg-warn/[0.06] text-warn/75' : ACTION_TONES[tone],
+        done
+          ? tone === 'safe'
+            ? 'cursor-default border-safe/40 bg-safe/15 text-safe'
+            : 'cursor-default border-warn/25 bg-warn/[0.06] text-warn/75'
+          : ACTION_TONES[tone],
         className,
       )}
     >
       <Icon className="size-4 shrink-0" aria-hidden="true" />
       <span>{done ? doneLabel : children}</span>
     </button>
+  )
+}
+
+const RESPONSE_STEPS = ['Units Dispatched', 'Team On-Site & Working', 'Problem Resolved'] as const
+
+function ResponseSteps({ stage }: { stage: 0 | 1 | 2 }) {
+  return (
+    <div className="rounded-xl border border-border bg-black/25 px-4 py-3.5" role="list" aria-label="Response progress">
+      <div className="flex items-center">
+        {RESPONSE_STEPS.map((label, i) => {
+          const reached = i <= stage
+          const current = i === stage && stage < 2
+          const done = i === 2 && stage === 2
+          return (
+            <div key={label} role="listitem" aria-label={label} className={cn('flex items-center', i < 2 && 'flex-1')}>
+              <span
+                className={cn(
+                  'size-2.5 shrink-0 rounded-full transition-all duration-500',
+                  !reached && 'bg-white/15',
+                  reached && !done && 'bg-warn shadow-[0_0_10px_var(--warn)]',
+                  done && 'bg-safe shadow-[0_0_10px_var(--safe)]',
+                  current && 'animate-pulse',
+                )}
+              />
+              {i < 2 && (
+                <span className="relative mx-2 h-px flex-1 overflow-hidden bg-white/10">
+                  <motion.span
+                    className="absolute inset-y-0 left-0 bg-warn/70"
+                    initial={false}
+                    animate={{ width: i < stage ? '100%' : '0%' }}
+                    transition={{ duration: 0.7, ease: 'easeOut' }}
+                  />
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-2 flex justify-between gap-2 font-mono text-[9px] font-semibold uppercase tracking-[0.12em]">
+        {RESPONSE_STEPS.map((label, i) => (
+          <span key={label} className={cn(i <= stage ? (i === 2 ? 'text-safe' : 'text-warn') : 'text-muted-foreground/60')}>
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
   )
 }
