@@ -15,6 +15,9 @@ const STATE_VERSION = 1
 const MAX_AUDIT = 250
 const MAX_ACTIVE = 40
 
+export const ON_SITE_DELAY_MS = 5_000   // "Units Dispatched" -> "Team On-Site & Working"
+export const ARCHIVE_DELAY_MS = 1_800   // "Problem Resolved" shown, then archived
+
 const EMPTY_STATE: SentinelState = {
   version: STATE_VERSION,
   hydrated: false,
@@ -34,12 +37,14 @@ function buildSeedState(): SentinelState {
   const pastFireResolved: Incident = {
     ...pastFire,
     dispatchedAt: pastFire.detectedAt + 38_000,
+    onSiteAt: pastFire.detectedAt + 43_000,
     protocolAt: pastFire.detectedAt + 52_000,
     resolvedAt: pastFire.detectedAt + 9 * min,
     resolution: 'resolved',
     actions: [
       ...pastFire.actions,
       { at: pastFire.detectedAt + 38_000, kind: 'dispatch', label: 'Quick Response Team Bravo-2 dispatched' },
+      { at: pastFire.detectedAt + 43_000, kind: 'onsite', label: 'Team on-site and working in Zone B' },
       { at: pastFire.detectedAt + 52_000, kind: 'protocol', label: 'Zone B evacuation alarm and HVAC shutdown activated' },
       { at: pastFire.detectedAt + 9 * min, kind: 'resolved', label: 'Incident resolved and archived by operator' },
     ],
@@ -60,11 +65,13 @@ function buildSeedState(): SentinelState {
   const pastAccidentResolved: Incident = {
     ...pastAccident,
     dispatchedAt: pastAccident.detectedAt + 41_000,
+    onSiteAt: pastAccident.detectedAt + 46_000,
     resolvedAt: pastAccident.detectedAt + 14 * min,
     resolution: 'resolved',
     actions: [
       ...pastAccident.actions,
       { at: pastAccident.detectedAt + 41_000, kind: 'dispatch', label: 'Quick Response Team Alpha-1 dispatched' },
+      { at: pastAccident.detectedAt + 46_000, kind: 'onsite', label: 'Team on-site and working in Zone A' },
       { at: pastAccident.detectedAt + 14 * min, kind: 'resolved', label: 'Incident resolved and archived by operator' },
     ],
   }
@@ -95,7 +102,7 @@ function persist() {
     const { hydrated: _h, ...rest } = state
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest))
   } catch {
-    // Storage may be full or disabled (private mode); the in-memory state keeps working.
+    // Storage may be full or disabled
   }
 }
 
@@ -118,7 +125,7 @@ function init() {
       }
     }
   } catch {
-    // Corrupt payload falls through to a fresh seed.
+    // Fall through
   }
   state = buildSeedState()
   persist()
@@ -131,7 +138,7 @@ if (typeof window !== 'undefined') {
       state = { ...(JSON.parse(e.newValue) as SentinelState), hydrated: true }
       emit()
     } catch {
-      // ignore malformed cross-tab payloads
+      // ignore
     }
   })
 }
@@ -193,10 +200,13 @@ export const sentinel = {
       ...s,
       incidents: s.incidents.map((i) =>
         i.id === id && !i.dispatchedAt
-          ? withAction({ ...i, dispatchedAt: Date.now() }, {
-              kind: 'dispatch',
-              label: `Quick Response Team dispatched to Zone ${i.zoneId}`,
-            })
+          ? withAction(
+              { ...i, dispatchedAt: Date.now() },
+              {
+                kind: 'dispatch',
+                label: `Quick Response Team dispatched to Zone ${i.zoneId}`,
+              },
+            )
           : i,
       ),
     }))
@@ -207,13 +217,16 @@ export const sentinel = {
       ...s,
       incidents: s.incidents.map((i) =>
         i.id === id && !i.protocolAt
-          ? withAction({ ...i, protocolAt: Date.now() }, {
-              kind: 'protocol',
-              label:
-                i.type === 'fire'
-                  ? `Zone ${i.zoneId} evacuation alarm and suppression protocol activated`
-                  : `Zone ${i.zoneId} automated warning broadcast and lockdown engaged`,
-            })
+          ? withAction(
+              { ...i, protocolAt: Date.now() },
+              {
+                kind: 'protocol',
+                label:
+                  i.type === 'fire'
+                    ? `Zone ${i.zoneId} evacuation alarm and suppression protocol activated`
+                    : `Zone ${i.zoneId} automated warning broadcast and lockdown engaged`,
+              },
+            )
           : i,
       ),
     }))
@@ -239,19 +252,50 @@ export const sentinel = {
   },
 
   resolve(id: string) {
+    setState((s) => ({
+      ...s,
+      incidents: s.incidents.map((i) =>
+        i.id === id && !i.closingAt ? { ...i, closingAt: Date.now() } : i,
+      ),
+    }))
+  },
+
+  advanceLifecycle() {
+    const now = Date.now()
+    const due = state.incidents.filter(
+      (i) =>
+        (i.closingAt && now - i.closingAt >= ARCHIVE_DELAY_MS) ||
+        (i.dispatchedAt && !i.onSiteAt && !i.closingAt && now - i.dispatchedAt >= ON_SITE_DELAY_MS),
+    )
+    if (due.length === 0) return
     setState((s) => {
-      const target = s.incidents.find((i) => i.id === id)
-      if (!target) return s
-      const now = Date.now()
-      const archived = withAction({ ...target, resolvedAt: now, resolution: 'resolved' }, {
-        kind: 'resolved',
-        label: 'Incident resolved and archived by operator',
-      }, now)
-      return {
-        ...s,
-        incidents: s.incidents.filter((i) => i.id !== id),
-        audit: [archived, ...s.audit].slice(0, MAX_AUDIT),
+      let incidents = s.incidents
+      let audit = s.audit
+      for (const i of due) {
+        if (i.closingAt) {
+          const archived = withAction(
+            { ...i, resolvedAt: now, resolution: 'resolved' as const },
+            {
+              kind: 'resolved',
+              label: 'Problem resolved and archived by operator',
+            },
+            now,
+          )
+          incidents = incidents.filter((x) => x.id !== i.id)
+          audit = [archived, ...audit].slice(0, MAX_AUDIT)
+        } else {
+          incidents = incidents.map((x) =>
+            x.id === i.id
+              ? withAction(
+                  { ...x, onSiteAt: now },
+                  { kind: 'onsite', label: `Team on-site and working in Zone ${x.zoneId}` },
+                  now,
+                )
+              : x,
+          )
+        }
       }
+      return { ...s, incidents, audit }
     })
   },
 
@@ -260,10 +304,14 @@ export const sentinel = {
       const target = s.incidents.find((i) => i.id === id)
       if (!target) return s
       const now = Date.now()
-      const archived = withAction({ ...target, resolvedAt: now, resolution: 'false-alarm' }, {
-        kind: 'dismissed',
-        label: 'Operator verified footage: dismissed as false alarm',
-      }, now)
+      const archived = withAction(
+        { ...target, resolvedAt: now, resolution: 'false-alarm' },
+        {
+          kind: 'dismissed',
+          label: 'Operator verified footage: dismissed as false alarm',
+        },
+        now,
+      )
       return {
         ...s,
         incidents: s.incidents.filter((i) => i.id !== id),
