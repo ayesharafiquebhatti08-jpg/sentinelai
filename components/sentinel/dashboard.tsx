@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { motion } from 'motion/react'
 import { ShieldAlert, Plus, Search, Radio, X } from 'lucide-react'
 import { useSentinelStore, Incident } from '@/lib/sentinel/store'
@@ -12,9 +12,9 @@ export function Dashboard() {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null)
   const [showReportModal, setShowReportModal] = useState(false)
 
-  // Form state for public report
-  const [formZone, setFormZone] = useState<'A' | 'B' | 'C' | 'D'>('A')
-  const [formCategory, setFormCategory] = useState('Suspicious Activity')
+  // Form state for custom text inputs
+  const [formLocation, setFormLocation] = useState('')
+  const [formCategory, setFormCategory] = useState('')
   const [formDesc, setFormDesc] = useState('')
   const [formSubmitting, setFormSubmitting] = useState(false)
 
@@ -36,20 +36,21 @@ export function Dashboard() {
     e.preventDefault()
     setFormSubmitting(true)
     setTimeout(() => {
-      const zoneNames = { A: 'Zone A · Main Gate', B: 'Zone B · Campus Corridor', C: 'Zone C · Server Room', D: 'Zone D · Perimeter Wall' }
       store.addIncident({
-        title: formDesc.slice(0, 45) || 'Manual Campus Report',
-        zoneId: formZone,
-        zoneName: zoneNames[formZone],
-        category: formCategory,
-        priority: 'high',
-        status: 'review',
-        confidence: 0.88,
-        indicators: ['Submitted manually via public report form', formDesc],
-        recommendedAction: 'Verify via local warden inspection.',
-        uncertaintyNote: 'User-submitted report requiring physical verification.',
+        title: formDesc.slice(0, 45) || formCategory || 'Reported Threat Incident',
+        zoneId: 'B', // Assigned to alarming zone feed
+        zoneName: formLocation || 'Custom Campus Location',
+        category: formCategory || 'Active Threat',
+        priority: 'critical',
+        status: 'active', // Forces it into active alarm status
+        confidence: 0.95,
+        indicators: ['Manual public report filed', formDesc],
+        recommendedAction: 'Immediate dispatch required for verification.',
+        uncertaintyNote: 'User-submitted report flagged into active alarm queue.',
       })
       setFormSubmitting(false)
+      setFormLocation('')
+      setFormCategory('')
       setFormDesc('')
       setShowReportModal(false)
     }, 400)
@@ -122,7 +123,7 @@ export function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { id: 'A', name: 'Zone A · Main Gate', status: 'Normal', risk: '44', alert: false, img: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=800&q=80' },
-              { id: 'B', name: 'Zone B · Campus Corridor', status: 'Threat Alarming', risk: '81', alert: true, img: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80' },
+              { id: 'B', name: 'Zone B · Campus Corridor', status: activeCount > 0 ? 'ACTIVE THREAT ALARM' : 'Threat Alarming', risk: '81', alert: true, img: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80' },
               { id: 'C', name: 'Zone C · Server Room', status: 'Normal', risk: '58', alert: false, img: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80' },
               { id: 'D', name: 'Zone D · Perimeter Wall', status: 'Threat Alarming', risk: '99', alert: true, img: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f764e?auto=format&fit=crop&w=800&q=80' },
             ].map((cam) => (
@@ -300,27 +301,31 @@ export function Dashboard() {
 
               <form onSubmit={handleReportSubmit} className="space-y-4 font-mono text-xs">
                 <div>
-                  <label className="block text-slate-400 mb-1">Select Location / Zone</label>
-                  <select value={formZone} onChange={(e: any) => setFormZone(e.target.value)} className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white">
-                    <option value="A">Zone A · Main Gate</option>
-                    <option value="B">Zone B · Campus Corridor</option>
-                    <option value="C">Zone C · Server Room</option>
-                    <option value="D">Zone D · Perimeter Wall</option>
-                  </select>
+                  <label className="block text-slate-400 mb-1">Location / Zone</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g., Main Library Entrance, Parking Lot C..."
+                    value={formLocation}
+                    onChange={(e) => setFormLocation(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-rose-500"
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Incident Category</label>
-                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white">
-                    <option value="Suspicious Activity">Suspicious Activity</option>
-                    <option value="Safety Hazard">Safety Hazard</option>
-                    <option value="Unauthorized Access">Unauthorized Access</option>
-                    <option value="Equipment Malfunction">Equipment Malfunction</option>
-                  </select>
+                  <label className="block text-slate-400 mb-1">Incident Problem Type / Category</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g., Unauthorized Entry, Suspicious Package..."
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-rose-500"
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Description</label>
+                  <label className="block text-slate-400 mb-1">Description of Observation</label>
                   <textarea
                     required
                     rows={3}
