@@ -16,9 +16,8 @@ const MAX_AUDIT = 250
 const MAX_ACTIVE = 40
 
 export const ON_SITE_DELAY_MS = 3_000     // 3s: Units Dispatched -> Team On-Site
-export const RESOLVING_DELAY_MS = 4_000  // 4s: Team On-Site -> Resolving Issue
-export const RESOLVE_HOLD_MS = 3_000     // 3s: Problem Resolved shown before archiving
-export const ARCHIVE_DELAY_MS = 1_800
+export const RESOLVING_DELAY_MS = 3_000  // 3s: Team On-Site -> Resolving Issue
+export const RESOLVE_HOLD_MS = 2_500     // 2.5s: Problem Resolved shown before archiving
 
 const EMPTY_STATE: SentinelState = {
   version: STATE_VERSION,
@@ -38,18 +37,18 @@ function buildSeedState(): SentinelState {
   const pastFire = createIncident('fire', next(), { confidence: 96.2, source: 'seed', at: now - 142 * min })
   const pastFireResolved: Incident = {
     ...pastFire,
-    dispatchedAt: pastFire.detectedAt + 38_000,
-    onSiteAt: pastFire.detectedAt + 41_000,
-    resolvingAt: pastFire.detectedAt + 45_000,
-    closingAt: pastFire.detectedAt + 49_000,
+    dispatchedAt: pastFire.detectedAt + 4_000,
+    onSiteAt: pastFire.detectedAt + 7_000,
+    resolvingAt: pastFire.detectedAt + 10_000,
+    closingAt: pastFire.detectedAt + 13_000,
     resolvedAt: pastFire.detectedAt + 9 * min,
     resolution: 'resolved',
     actions: [
       ...pastFire.actions,
-      { at: pastFire.detectedAt + 38_000, kind: 'dispatch', label: 'Quick Response Team Bravo-2 dispatched' },
-      { at: pastFire.detectedAt + 41_000, kind: 'onsite', label: 'Team arrived on-site in Zone B' },
-      { at: pastFire.detectedAt + 45_000, kind: 'resolving', label: 'Team actively resolving the issue' },
-      { at: pastFire.detectedAt + 49_000, kind: 'resolved', label: 'Problem resolved and archived' },
+      { at: pastFire.detectedAt + 4_000, kind: 'dispatch', label: 'Quick Response Team Bravo-2 dispatched (Response: 4.0s)' },
+      { at: pastFire.detectedAt + 7_000, kind: 'onsite', label: 'Team arrived on-site in Zone B' },
+      { at: pastFire.detectedAt + 10_000, kind: 'resolving', label: 'Team actively resolving the issue' },
+      { at: pastFire.detectedAt + 13_000, kind: 'resolved', label: 'Problem resolved and archived' },
     ],
   }
 
@@ -64,24 +63,6 @@ function buildSeedState(): SentinelState {
     ],
   }
 
-  const pastAccident = createIncident('accident', next(), { confidence: 91.4, source: 'seed', at: now - 54 * min })
-  const pastAccidentResolved: Incident = {
-    ...pastAccident,
-    dispatchedAt: pastAccident.detectedAt + 41_000,
-    onSiteAt: pastAccident.detectedAt + 44_000,
-    resolvingAt: pastAccident.detectedAt + 48_000,
-    closingAt: pastAccident.detectedAt + 52_000,
-    resolvedAt: pastAccident.detectedAt + 14 * min,
-    resolution: 'resolved',
-    actions: [
-      ...pastAccident.actions,
-      { at: pastAccident.detectedAt + 41_000, kind: 'dispatch', label: 'Quick Response Team Alpha-1 dispatched' },
-      { at: pastAccident.detectedAt + 44_000, kind: 'onsite', label: 'Team arrived on-site in Zone A' },
-      { at: pastAccident.detectedAt + 48_000, kind: 'resolving', label: 'Team actively resolving the issue' },
-      { at: pastAccident.detectedAt + 52_000, kind: 'resolved', label: 'Problem resolved and archived' },
-    ],
-  }
-
   const activeIntrusion = createIncident('intrusion', next(), { confidence: 94.8, source: 'seed', at: now - 3 * min })
   const reviewItem = createIncident('fire', next(), { confidence: 41.3, source: 'seed', at: now - 7 * min })
 
@@ -91,7 +72,7 @@ function buildSeedState(): SentinelState {
     seq,
     ambient: true,
     incidents: [activeIntrusion, reviewItem],
-    audit: [pastAccidentResolved, pastFalseDismissed, pastFireResolved],
+    audit: [pastFalseDismissed, pastFireResolved],
   }
 }
 
@@ -196,16 +177,20 @@ export const sentinel = {
   },
 
   dispatch(id: string) {
+    const now = Date.now()
     setState((s) => ({
       ...s,
-      incidents: s.incidents.map((i) =>
-        i.id === id && !i.dispatchedAt
-          ? withAction(
-              { ...i, dispatchedAt: Date.now() },
-              { kind: 'dispatch', label: `Quick Response Team dispatched to Zone ${i.zoneId}` },
-            )
-          : i,
-      ),
+      incidents: s.incidents.map((i) => {
+        if (i.id === id && !i.dispatchedAt) {
+          const responseTimeSec = ((now - i.detectedAt) / 1000).toFixed(1)
+          return withAction(
+            { ...i, dispatchedAt: now },
+            { kind: 'dispatch', label: `Quick Response Team dispatched to Zone ${i.zoneId} (Response time: ${responseTimeSec}s)` },
+            now,
+          )
+        }
+        return i
+      }),
     }))
   },
 
@@ -216,10 +201,7 @@ export const sentinel = {
         i.id === id && !i.protocolAt
           ? withAction(
               { ...i, protocolAt: Date.now() },
-              {
-                kind: 'protocol',
-                label: i.type === 'fire' ? `Evacuation protocol activated in Zone ${i.zoneId}` : `Lockdown engaged in Zone ${i.zoneId}`,
-              },
+              { kind: 'protocol', label: `Safety protocol activated in Zone ${i.zoneId}` },
             )
           : i,
       ),
@@ -341,9 +323,6 @@ export const sentinel = {
   },
 }
 
-const HISTORICAL_EVALUATIONS = 12_480
-const HISTORICAL_CORRECT = 12_318
-
 export function computeStats(s: SentinelState) {
   const startOfDay = new Date()
   startOfDay.setHours(0, 0, 0, 0)
@@ -355,17 +334,18 @@ export function computeStats(s: SentinelState) {
   ).length
   const resolved = s.audit.filter((i) => i.resolution === 'resolved').length
 
-  const correct = s.audit.filter((i) => {
-    const flaggedReal = i.confidence >= REVIEW_THRESHOLD
-    return flaggedReal ? i.resolution === 'resolved' : i.resolution === 'false-alarm'
-  }).length
-  const accuracy =
-    ((HISTORICAL_CORRECT + correct) / (HISTORICAL_EVALUATIONS + s.audit.length)) * 100
+  // Calculate average response time from audit log items that have dispatch time
+  const dispatchedItems = s.audit.filter((i) => i.dispatchedAt)
+  let avgResponseSec = 3.8 // benchmark default
+  if (dispatchedItems.length > 0) {
+    const totalSec = dispatchedItems.reduce((acc, i) => acc + ((i.dispatchedAt! - i.detectedAt) / 1000), 0)
+    avgResponseSec = Number((totalSec / dispatchedItems.length).toFixed(1))
+  }
 
   return {
     threatsToday,
     resolved,
-    accuracy,
+    avgResponseSec,
     activeCount: s.incidents.filter((i) => i.queue === 'active').length,
     reviewCount: s.incidents.filter((i) => i.queue === 'review').length,
   }
