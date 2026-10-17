@@ -23,6 +23,14 @@ export function Dashboard() {
   const now = useNow()
   const [view, setView] = useState<View>('dashboard')
 
+  // Drives the incident lifecycle (dispatched -> on-site -> resolved/archived).
+  useEffect(() => {
+    if (!state.hydrated) return
+    sentinel.advanceLifecycle()
+    const id = setInterval(() => sentinel.advanceLifecycle(), 500)
+    return () => clearInterval(id)
+  }, [state.hydrated])
+
   useEffect(() => {
     if (!state.hydrated || !state.ambient) return
     const id = setInterval(() => sentinel.ambientTick(), AMBIENT_INTERVAL_MS)
