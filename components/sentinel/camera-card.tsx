@@ -23,17 +23,20 @@ export function CameraCard({
 
   const dispatched = Boolean(threat?.dispatchedAt)
   const onSite = Boolean(threat?.onSiteAt)
+  const resolving = Boolean(threat?.resolvingAt)
   const closing = Boolean(threat?.closingAt)
   const contained = dispatched || threat?.protocolAt
 
   const status: { label: string; tone: Tone; solid?: boolean; pulse?: boolean } = threat
     ? closing
       ? { label: 'Problem Resolved', tone: 'safe' }
-      : onSite
-        ? { label: 'Team On-Site', tone: 'warn', pulse: true }
-        : contained
-          ? { label: 'Units Dispatched', tone: 'warn', pulse: true }
-          : { label: 'Threat', tone: 'threat', solid: true, pulse: true }
+      : resolving
+        ? { label: 'Resolving Issue', tone: 'warn', pulse: true }
+        : onSite
+          ? { label: 'Team On-Site', tone: 'warn', pulse: true }
+          : contained
+            ? { label: 'Units Dispatched', tone: 'warn', pulse: true }
+            : { label: 'Threat', tone: 'threat', solid: true, pulse: true }
     : reviewCount > 0
       ? { label: 'Review', tone: 'info' }
       : { label: 'Clear', tone: 'safe' }
@@ -41,11 +44,13 @@ export function CameraCard({
   const hudColor = threat
     ? closing
       ? 'border-safe'
-      : onSite
+      : resolving
         ? 'border-warn'
-        : contained
+        : onSite
           ? 'border-warn'
-          : 'border-threat'
+          : contained
+            ? 'border-warn'
+            : 'border-threat'
     : 'border-white/40'
 
   return (
