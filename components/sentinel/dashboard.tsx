@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { ShieldAlert, ShieldCheck, AlertTriangle, Plus, Search, Filter, RefreshCw, CheckCircle2, History, Radio, X, FileText, Info } from 'lucide-react'
+import { ShieldAlert, Plus, Search, Radio, X } from 'lucide-react'
 import { useSentinelStore, Incident } from '@/lib/sentinel/store'
 
 export function Dashboard() {
   const store = useSentinelStore()
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
-  const [filterPriority, setFilterPriority] = useState<string>('all')
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null)
   const [showReportModal, setShowReportModal] = useState(false)
 
@@ -18,7 +17,6 @@ export function Dashboard() {
   const [formCategory, setFormCategory] = useState('Suspicious Activity')
   const [formDesc, setFormDesc] = useState('')
   const [formSubmitting, setFormSubmitting] = useState(false)
-  const [lastSubmittedId, setLastSubmittedId] = useState<string | null>(null)
 
   useEffect(() => {
     store.setHydrated(true)
@@ -35,8 +33,7 @@ export function Dashboard() {
   const filteredIncidents = store.incidents.filter(inc => {
     const matchesSearch = inc.title.toLowerCase().includes(search.toLowerCase()) || inc.id.toLowerCase().includes(search.toLowerCase()) || inc.zoneName.toLowerCase().includes(search.toLowerCase())
     const matchesStatus = filterStatus === 'all' || inc.status === filterStatus
-    const matchesPriority = filterPriority === 'all' || inc.priority === filterPriority
-    return matchesSearch && matchesStatus && matchesPriority
+    return matchesSearch && matchesStatus
   })
 
   const handleReportSubmit = (e: React.FormEvent) => {
@@ -44,7 +41,7 @@ export function Dashboard() {
     setFormSubmitting(true)
     setTimeout(() => {
       const zoneNames = { A: 'Zone A · Main Gate', B: 'Zone B · Campus Corridor', C: 'Zone C · Server Room', D: 'Zone D · Perimeter Wall' }
-      const newId = store.addIncident({
+      store.addIncident({
         title: formDesc.slice(0, 45) || 'Manual Campus Report',
         zoneId: formZone,
         zoneName: zoneNames[formZone],
@@ -56,7 +53,6 @@ export function Dashboard() {
         recommendedAction: 'Verify via local warden inspection.',
         uncertaintyNote: 'User-submitted report requiring physical verification.',
       })
-      setLastSubmittedId(newId)
       setFormSubmitting(false)
       setFormDesc('')
       setShowReportModal(false)
@@ -69,7 +65,7 @@ export function Dashboard() {
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-10">
         
-        {/* HEADER & DISCLAIMER BANNER */}
+        {/* HEADER & BANNER */}
         <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 font-mono text-xs uppercase tracking-widest mb-2">
@@ -115,7 +111,7 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* 4 SIMULATED CAMERA FEEDS (PRIMARY MONITORING VIEW) */}
+        {/* 4 CAMERA FEEDS (PRIMARY MONITORING VIEW) */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
