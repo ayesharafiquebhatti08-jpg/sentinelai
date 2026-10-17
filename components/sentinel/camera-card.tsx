@@ -1,7 +1,8 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
-import { Video } from 'lucide-react'
+import { Video, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPreciseTime, SEVERITY_STYLES, THREAT_ICONS } from '@/lib/sentinel/format'
 import { type Zone } from '@/lib/sentinel/scenarios'
@@ -21,11 +22,24 @@ export function CameraCard({
 }) {
   const Icon = threat ? THREAT_ICONS[threat.type] : Video
 
+  // Proactive Early Warning simulation for calm zones
+  const [riskScore, setRiskScore] = useState(25)
+  useEffect(() => {
+    if (threat) return
+    const interval = setInterval(() => {
+      setRiskScore((prev) => (prev >= 82 ? 30 : prev + Math.floor(Math.random() * 12) + 5))
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [threat])
+
   const dispatched = Boolean(threat?.dispatchedAt)
   const onSite = Boolean(threat?.onSiteAt)
   const resolving = Boolean(threat?.resolvingAt)
   const closing = Boolean(threat?.closingAt)
   const contained = dispatched || threat?.protocolAt
+
+  // Calculate live response time if dispatched
+  const responseTimeSec = threat?.dispatchedAt ? ((threat.dispatchedAt - threat.detectedAt) / 1000).toFixed(1) : null
 
   const status: { label: string; tone: Tone; solid?: boolean; pulse?: boolean } = threat
     ? closing
@@ -37,9 +51,11 @@ export function CameraCard({
           : contained
             ? { label: 'Units Dispatched', tone: 'warn', pulse: true }
             : { label: 'Threat', tone: 'threat', solid: true, pulse: true }
-    : reviewCount > 0
-      ? { label: 'Review', tone: 'info' }
-      : { label: 'Clear', tone: 'safe' }
+    : riskScore > 65
+      ? { label: `Risk Building (${riskScore}%)`, tone: 'threat', pulse: true }
+      : reviewCount > 0
+        ? { label: 'Review', tone: 'info' }
+        : { label: `Monitoring (${riskScore}%)`, tone: 'safe' }
 
   const hudColor = threat
     ? closing
@@ -51,13 +67,15 @@ export function CameraCard({
           : contained
             ? 'border-warn'
             : 'border-threat'
-    : 'border-white/40'
+    : riskScore > 65
+      ? 'border-threat/70'
+      : 'border-white/40'
 
   return (
     <article
       className={cn(
         'panel relative flex flex-col overflow-hidden rounded-2xl border',
-        threat ? (threat.severity === 'critical' ? 'panel-alert' : 'panel-warn') : 'border-border',
+        threat ? (threat.severity === 'critical' ? 'panel-alert' : 'panel-warn') : riskScore > 65 ? 'panel-alert' : 'border-border',
       )}
       aria-label={`Camera feed for Zone ${zone.id} - ${zone.name}`}
     >
@@ -79,6 +97,14 @@ export function CameraCard({
           </span>
         </div>
 
+        {/* Proactive Risk Warning Banner if risk is building */}
+        {!threat && riskScore > 50 && (
+          <div className="absolute inset-x-4 top-12 flex items-center gap-2 rounded-xl bg-threat/20 px-3 py-1.5 backdrop-blur-md border border-threat/40 font-mono text-[10px] text-white animate-pulse">
+            <AlertTriangle className="size-3.5 text-threat shrink-0" />
+            <span className="truncate">Proactive Alert: Unknown entity near restricted door (Risk: {riskScore}%)</span>
+          </div>
+        )}
+
         {threat && (
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <motion.div
@@ -95,9 +121,16 @@ export function CameraCard({
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white">
                 {threat.title}
               </span>
-              <span className={cn('tabular font-mono text-sm font-bold', threat.severity === 'critical' ? 'text-threat' : 'text-warn')}>
-                {threat.confidence.toFixed(1)}%
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={cn('tabular font-mono text-sm font-bold', threat.severity === 'critical' ? 'text-threat' : 'text-warn')}>
+                  {threat.confidence.toFixed(1)}%
+                </span>
+                {responseTimeSec && (
+                  <span className="rounded bg-safe/20 px-1.5 py-0.5 font-mono text-[9px] text-safe border border-safe/40">
+                    Detected → Dispatched: {responseTimeSec}s
+                  </span>
+                )}
+              </div>
             </motion.div>
           </div>
         )}
@@ -135,8 +168,10 @@ export function CameraCard({
           <p className="mt-0.5 font-semibold text-white/90">⚡ {zone.latency}ms</p>
         </div>
         <div className="pl-4">
-          <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Sensors</p>
-          <p className="truncate mt-0.5 font-semibold text-white/80">{zone.sensors}</p>
+          <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Risk Index</p>
+          <p className={cn('mt-0.5 font-semibold', riskScore > 65 ? 'text-threat animate-pulse' : 'text-white/80')}>
+            {threat ? '99% Active' : `${riskScore}% Stable`}
+          </p>
         </div>
       </div>
     </article>
