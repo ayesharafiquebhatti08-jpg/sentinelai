@@ -1,307 +1,363 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { motion } from 'motion/react'
-import { History, LayoutDashboard, Loader2, ShieldAlert, Truck, CheckCircle2, Radio, ArrowRight, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useNow } from '@/lib/sentinel/format'
-import { TOTAL_CAMERAS, ZONE_LIST } from '@/lib/sentinel/scenarios'
-import { computeStats, sentinel, useSentinel } from '@/lib/sentinel/store'
-import { AuditLog } from './audit-log'
-import { CameraCard } from './camera-card'
-import { ThreatCard } from './threat-card'
-import { TopNav } from './top-nav'
-
-type View = 'dashboard' | 'audit'
-type ActiveTab = 'none' | 'critical' | 'responding' | 'review' | 'cameras'
-
-const AMBIENT_INTERVAL_MS = 35_000
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
+import { ShieldAlert, ShieldCheck, AlertTriangle, Plus, Search, Filter, RefreshCw, CheckCircle2, History, Radio, X, FileText, Info } from 'lucide-react'
+import { useSentinelStore, Incident } from '@/lib/sentinel/store'
 
 export function Dashboard() {
-  const state = useSentinel()
-  const now = useNow()
-  const [view, setView] = useState<View>('dashboard')
-  const [activeTab, setActiveTab] = useState<ActiveTab>('none')
+  const store = useSentinelStore()
+  const [search, setSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [filterPriority, setFilterPriority] = useState<string>('all')
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null)
+  const [showReportModal, setShowReportModal] = useState(false)
+
+  // Form state for public report
+  const [formZone, setFormZone] = useState<'A' | 'B' | 'C' | 'D'>('A')
+  const [formCategory, setFormCategory] = useState('Suspicious Activity')
+  const [formDesc, setFormDesc] = useState('')
+  const [formSubmitting, setFormSubmitting] = useState(false)
+  const [lastSubmittedId, setLastSubmittedId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!state.hydrated) return
-    sentinel.advanceLifecycle()
-    const id = setInterval(() => sentinel.advanceLifecycle(), 500)
-    return () => clearInterval(id)
-  }, [state.hydrated])
+    store.setHydrated(true)
+  }, [])
 
-  useEffect(() => {
-    if (!state.hydrated || !state.ambient) return
-    const id = setInterval(() => sentinel.ambientTick(), AMBIENT_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [state.hydrated, state.ambient])
+  if (!store.hydrated) return null
 
-  const stats = computeStats(state)
+  // Computed Accurate Metrics from real incident array
+  const totalIncidents = store.incidents.length
+  const activeCount = store.incidents.filter(i => i.status === 'active').length
+  const reviewCount = store.incidents.filter(i => i.status === 'review').length
+  const resolvedCount = store.incidents.filter(i => i.status === 'resolved').length
 
-  const activeThreats = state.incidents.filter((i) => i.queue === 'active' && !i.dispatchedAt)
-  const activeResponses = state.incidents.filter((i) => i.dispatchedAt || i.onSiteAt || i.resolvingAt || i.closingAt)
-  const reviewQueue = state.incidents.filter((i) => i.queue === 'review')
+  const filteredIncidents = store.incidents.filter(inc => {
+    const matchesSearch = inc.title.toLowerCase().includes(search.toLowerCase()) || inc.id.toLowerCase().includes(search.toLowerCase()) || inc.zoneName.toLowerCase().includes(search.toLowerCase())
+    const matchesStatus = filterStatus === 'all' || inc.status === filterStatus
+    const matchesPriority = filterPriority === 'all' || inc.priority === filterPriority
+    return matchesSearch && matchesStatus && matchesPriority
+  })
+
+  const handleReportSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormSubmitting(true)
+    setTimeout(() => {
+      const zoneNames = { A: 'Zone A · Main Gate', B: 'Zone B · Campus Corridor', C: 'Zone C · Server Room', D: 'Zone D · Perimeter Wall' }
+      const newId = store.addIncident({
+        title: formDesc.slice(0, 45) || 'Manual Campus Report',
+        zoneId: formZone,
+        zoneName: zoneNames[formZone],
+        category: formCategory,
+        priority: 'high',
+        status: 'review',
+        confidence: 0.88,
+        indicators: ['Submitted manually via public report form', formDesc],
+        recommendedAction: 'Verify via local warden inspection.',
+        uncertaintyNote: 'User-submitted report requiring physical verification.',
+      })
+      setLastSubmittedId(newId)
+      setFormSubmitting(false)
+      setFormDesc('')
+      setShowReportModal(false)
+    }, 400)
+  }
 
   return (
-    <div className="min-h-screen bg-[#030508] text-slate-100 selection:bg-rose-500/30 selection:text-white">
-      {/* Subtle atmospheric gradient */}
+    <div className="min-h-screen bg-[#030508] text-slate-100 selection:bg-rose-500/30 selection:text-white font-sans">
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/40 via-[#030508] to-[#010203]" />
 
-      <div className="relative z-10">
-        <TopNav />
-
-        <main className="mx-auto max-w-[1300px] space-y-12 px-6 py-12 md:px-12">
-          
-          {/* HERO SECTION (Clean Code//Connect Style) */}
-          <div className="text-center space-y-4 max-w-2xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 font-mono text-xs uppercase tracking-widest">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8 space-y-10">
+        
+        {/* HEADER & DISCLAIMER BANNER */}
+        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 font-mono text-xs uppercase tracking-widest mb-2">
               <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
-              Autonomous Threat Prevention Hub
+              UBIT Code//Connect '26 · Threat Prevention MVP
             </div>
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white">
+            <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
               SENTINEL<span className="text-rose-500">AI</span>
             </h1>
-            <p className="font-mono text-xs text-slate-400 leading-relaxed">
-              Real-time edge threat detection, zero-latency automated response lifecycles, and autonomous facility surveillance.
-            </p>
           </div>
 
-          {/* VIEW SWITCHER (Dashboard vs Audit Log) */}
-          <div className="flex justify-center">
-            <div className="inline-flex items-center gap-1.5 rounded-2xl bg-white/[0.03] p-1.5 border border-white/[0.06] backdrop-blur-md">
-              <button
-                type="button"
-                onClick={() => setView('dashboard')}
-                className={cn(
-                  'flex items-center gap-2 rounded-xl px-5 py-2 font-mono text-xs transition-all',
-                  view === 'dashboard' ? 'bg-white/10 text-white font-bold shadow-md' : 'text-slate-400 hover:text-white'
-                )}
-              >
-                <LayoutDashboard className="size-4" />
-                <span>Mission Control</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setView('audit')}
-                className={cn(
-                  'flex items-center gap-2 rounded-xl px-5 py-2 font-mono text-xs transition-all',
-                  view === 'audit' ? 'bg-white/10 text-white font-bold shadow-md' : 'text-slate-400 hover:text-white'
-                )}
-              >
-                <History className="size-4" />
-                <span>Audit Log ({state.audit.length})</span>
-              </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-rose-600/20"
+            >
+              <Plus className="size-4" />
+              <span>Report Incident</span>
+            </button>
+            <div className="px-3 py-2 rounded-xl bg-white/[0.03] border border-white/10 font-mono text-[11px] text-slate-400">
+              AI Status: <span className="text-amber-400 font-bold">Deterministic Demo Fallback</span>
             </div>
           </div>
+        </header>
 
-          {view === 'dashboard' ? (
-            <div className="space-y-10">
-              
-              {/* THE 4 MAIN ENTRY CARDS (Clean, Spaced, Uncluttered) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                
-                {/* Card 1: Critical Threats */}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab(activeTab === 'critical' ? 'none' : 'critical')}
-                  className={cn(
-                    'group text-left rounded-3xl p-6 border transition-all duration-300 flex flex-col justify-between h-48',
-                    activeTab === 'critical' 
-                      ? 'bg-rose-500/10 border-rose-500/50 shadow-[0_0_30px_rgba(244,63,94,0.15)]' 
-                      : 'bg-white/[0.02] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.04]'
+        {/* METRICS BAR */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-md">
+            <span className="font-mono text-xs text-slate-400 uppercase tracking-wider">Active Threats</span>
+            <p className="text-3xl font-extrabold font-mono text-rose-500 mt-1">{activeCount}</p>
+          </div>
+          <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-md">
+            <span className="font-mono text-xs text-slate-400 uppercase tracking-wider">Review Queue</span>
+            <p className="text-3xl font-extrabold font-mono text-amber-400 mt-1">{reviewCount}</p>
+          </div>
+          <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-md">
+            <span className="font-mono text-xs text-slate-400 uppercase tracking-wider">Resolved</span>
+            <p className="text-3xl font-extrabold font-mono text-emerald-400 mt-1">{resolvedCount}</p>
+          </div>
+          <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.08] backdrop-blur-md">
+            <span className="font-mono text-xs text-slate-400 uppercase tracking-wider">Total Tracked</span>
+            <p className="text-3xl font-extrabold font-mono text-white mt-1">{totalIncidents}</p>
+          </div>
+        </div>
+
+        {/* 4 SIMULATED CAMERA FEEDS (PRIMARY MONITORING VIEW) */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <Radio className="size-5 text-rose-500 animate-pulse" />
+              <span>Simulated Surveillance Matrix (4 Zones)</span>
+            </h2>
+            <span className="font-mono text-[11px] text-slate-400 bg-white/5 px-3 py-1 rounded-full border border-white/10">
+              Demo Feeds · Simulated Computer Vision Overlays Only
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { id: 'A', name: 'Zone A · Main Gate', status: 'Normal', risk: '44', alert: false, img: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=800&q=80' },
+              { id: 'B', name: 'Zone B · Campus Corridor', status: 'Threat Alarming', risk: '81', alert: true, img: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80' },
+              { id: 'C', name: 'Zone C · Server Room', status: 'Normal', risk: '58', alert: false, img: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80' },
+              { id: 'D', name: 'Zone D · Perimeter Wall', status: 'Threat Alarming', risk: '99', alert: true, img: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f764e?auto=format&fit=crop&w=800&q=80' },
+            ].map((cam) => (
+              <div key={cam.id} className={`relative rounded-2xl overflow-hidden border bg-black/60 backdrop-blur-md ${cam.alert ? 'border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.2)]' : 'border-white/10'}`}>
+                <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-3 bg-gradient-to-b from-black/80 to-transparent font-mono text-[10px]">
+                  <span className="flex items-center gap-1.5 text-white">
+                    <span className={`size-2 rounded-full ${cam.alert ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`} />
+                    CAM-0{cam.id === 'A' ? 1 : cam.id === 'B' ? 2 : cam.id === 'C' ? 3 : 4}
+                  </span>
+                  <span className="text-slate-400">REC</span>
+                </div>
+
+                <div className="relative aspect-[16/10] bg-black overflow-hidden">
+                  <img src={cam.img} alt={cam.name} className={`w-full h-full object-cover ${cam.alert ? 'contrast-125 sepia-[0.3]' : 'grayscale contrast-110'}`} />
+                  {cam.alert && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-36 h-24 border-2 border-rose-500 bg-rose-500/10 rounded flex items-start justify-between p-1.5 font-mono text-[8px] text-white">
+                        <span className="bg-rose-500 px-1 py-0.5 rounded font-bold">THREAT {cam.risk}%</span>
+                      </div>
+                    </div>
                   )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="p-3 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                      <ShieldAlert className="size-5" />
-                    </span>
-                    <span className="font-mono text-2xl font-bold text-white tabular">
-                      {activeThreats.length}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white group-hover:text-rose-400 transition-colors">
-                      Critical Threats
-                    </h3>
-                    <p className="font-mono text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                      <span>Inspect active alerts</span>
-                      <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
-                    </p>
-                  </div>
-                </button>
+                </div>
 
-                {/* Card 2: Teams On-Site */}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab(activeTab === 'responding' ? 'none' : 'responding')}
-                  className={cn(
-                    'group text-left rounded-3xl p-6 border transition-all duration-300 flex flex-col justify-between h-48',
-                    activeTab === 'responding' 
-                      ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.15)]' 
-                      : 'bg-white/[0.02] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.04]'
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="p-3 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      <Truck className="size-5" />
-                    </span>
-                    <span className="font-mono text-2xl font-bold text-white tabular">
-                      {activeResponses.length}
-                    </span>
-                  </div>
+                <div className="p-3 bg-black/90 border-t border-white/10 flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-bold text-white group-hover:text-amber-400 transition-colors">
-                      Teams On-Site
-                    </h3>
-                    <p className="font-mono text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                      <span>View response loop</span>
-                      <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
-                    </p>
+                    <h3 className="text-xs font-bold text-white">{cam.name}</h3>
+                    <p className={`font-mono text-[10px] ${cam.alert ? 'text-rose-400' : 'text-emerald-400'}`}>{cam.status}</p>
                   </div>
-                </button>
+                  <span className={`font-mono text-sm font-bold ${cam.alert ? 'text-rose-500' : 'text-amber-400'}`}>{cam.risk}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
-                {/* Card 3: Human Review */}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab(activeTab === 'review' ? 'none' : 'review')}
-                  className={cn(
-                    'group text-left rounded-3xl p-6 border transition-all duration-300 flex flex-col justify-between h-48',
-                    activeTab === 'review' 
-                      ? 'bg-sky-500/10 border-sky-500/50 shadow-[0_0_30px_rgba(14,165,233,0.15)]' 
-                      : 'bg-white/[0.02] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.04]'
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="p-3 rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                      <CheckCircle2 className="size-5" />
-                    </span>
-                    <span className="font-mono text-2xl font-bold text-white tabular">
-                      {reviewQueue.length}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white group-hover:text-sky-400 transition-colors">
-                      Human Review Queue
-                    </h3>
-                    <p className="font-mono text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                      <span>Verify low confidence</span>
-                      <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
-                    </p>
-                  </div>
-                </button>
+        {/* UNIFIED INCIDENT INBOX */}
+        <section className="space-y-6 pt-4">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <ShieldAlert className="size-5 text-rose-500" />
+              <span>Unified Incident Inbox</span>
+            </h2>
 
-                {/* Card 4: Live Cameras */}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab(activeTab === 'cameras' ? 'none' : 'cameras')}
-                  className={cn(
-                    'group text-left rounded-3xl p-6 border transition-all duration-300 flex flex-col justify-between h-48',
-                    activeTab === 'cameras' 
-                      ? 'bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.15)]' 
-                      : 'bg-white/[0.02] border-white/[0.08] hover:border-white/20 hover:bg-white/[0.04]'
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      <Radio className="size-5 animate-pulse" />
-                    </span>
-                    <span className="font-mono text-2xl font-bold text-white tabular">
-                      {TOTAL_CAMERAS}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">
-                      Live Camera Feeds
-                    </h3>
-                    <p className="font-mono text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                      <span>Inspect camera grid</span>
-                      <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
-                    </p>
-                  </div>
-                </button>
-
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 md:w-64">
+                <Search className="absolute left-3 top-2.5 size-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search incidents or IDs..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-4 py-2 font-mono text-xs text-white focus:outline-none focus:border-rose-500"
+                />
               </div>
 
-              {/* EXPANDED SECTION (Shown ONLY when a card above is clicked) */}
-              {activeTab !== 'none' && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-3xl border border-white/[0.1] bg-black/50 p-8 backdrop-blur-2xl space-y-6 shadow-2xl"
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="bg-black/60 border border-white/10 rounded-xl px-3 py-2 font-mono text-xs text-slate-300 focus:outline-none"
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="review">Review</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {filteredIncidents.length === 0 ? (
+              <div className="col-span-3 py-16 text-center font-mono text-xs text-slate-500 bg-white/[0.01] rounded-2xl border border-white/5">
+                No matching incidents found in inbox.
+              </div>
+            ) : (
+              filteredIncidents.map((incident) => (
+                <div
+                  key={incident.id}
+                  onClick={() => setSelectedIncident(incident)}
+                  className="group cursor-pointer rounded-2xl bg-white/[0.02] border border-white/[0.08] hover:border-white/20 p-5 space-y-4 transition-all hover:bg-white/[0.04]"
                 >
-                  <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-white capitalize">
-                        {activeTab === 'critical' && 'Critical Active Threats'}
-                        {activeTab === 'responding' && 'Teams On-Site & Active Response'}
-                        {activeTab === 'review' && 'Human-in-the-Loop Review Queue'}
-                        {activeTab === 'cameras' && 'Live Multi-Zone Surveillance Grid'}
-                      </h2>
-                      <p className="font-mono text-xs text-slate-400 mt-1">
-                        {activeTab === 'cameras' ? 'Real-time computer vision telemetry across 4 zones' : `Showing ${
-                          activeTab === 'critical' ? activeThreats.length :
-                          activeTab === 'responding' ? activeResponses.length : reviewQueue.length
-                        } records`}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('none')}
-                      className="p-2.5 rounded-full bg-white/5 text-slate-400 hover:text-white border border-white/10 transition-colors"
-                    >
-                      <X className="size-5" />
-                    </button>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] text-slate-400">{incident.id}</span>
+                    <span className={`px-2.5 py-1 rounded-full font-mono text-[10px] uppercase font-bold ${
+                      incident.status === 'active' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                      incident.status === 'review' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                      'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    }`}>
+                      {incident.status}
+                    </span>
                   </div>
 
-                  {activeTab === 'cameras' ? (
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-                      {ZONE_LIST.map((zone) => {
-                        const zoneIncidents = state.incidents.filter((i) => i.zoneId === zone.id)
-                        return (
-                          <CameraCard
-                            key={zone.id}
-                            zone={zone}
-                            now={now}
-                            threat={zoneIncidents.find((i) => i.queue === 'active')}
-                            reviewCount={zoneIncidents.filter((i) => i.queue === 'review').length}
-                          />
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div>
-                      {
-                        (activeTab === 'critical' ? activeThreats :
-                         activeTab === 'responding' ? activeResponses : reviewQueue).length === 0 ? (
-                          <div className="py-12 text-center font-mono text-xs text-slate-500">
-                            No records currently in this queue. All sectors secure.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {(activeTab === 'critical' ? activeThreats :
-                              activeTab === 'responding' ? activeResponses : reviewQueue).map((incident) => (
-                              <ThreatCard key={incident.id} incident={incident} now={now} />
-                            ))}
-                          </div>
-                        )
-                      }
-                    </div>
-                  )}
-                </motion.div>
-              )}
+                  <div>
+                    <h3 className="font-bold text-white group-hover:text-rose-400 transition-colors">{incident.title}</h3>
+                    <p className="font-mono text-xs text-slate-400 mt-1">{incident.zoneName}</p>
+                  </div>
 
-            </div>
-          ) : (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <AuditLog audit={state.audit} />
+                  <div className="pt-2 border-t border-white/5 flex items-center justify-between font-mono text-[11px] text-slate-400">
+                    <span>Conf: {Math.round(incident.confidence * 100)}%</span>
+                    <span>{new Date(incident.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* INCIDENT DETAILS INSPECTOR MODAL */}
+        {selectedIncident && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#0b0f17] border border-white/15 rounded-3xl max-w-2xl w-full p-8 space-y-6 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div>
+                  <span className="font-mono text-xs text-rose-400">{selectedIncident.id} · {selectedIncident.zoneName}</span>
+                  <h2 className="text-xl font-bold text-white mt-1">{selectedIncident.title}</h2>
+                </div>
+                <button onClick={() => setSelectedIncident(null)} className="p-2 rounded-full bg-white/5 text-slate-400 hover:text-white">
+                  <X className="size-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4 font-mono text-xs text-slate-300">
+                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 space-y-2">
+                  <span className="text-rose-400 font-bold uppercase tracking-wider block">Detected Indicators</span>
+                  <ul className="list-disc list-inside space-y-1 text-slate-200">
+                    {selectedIncident.indicators.map((ind, i) => <li key={i}>{ind}</li>)}
+                  </ul>
+                </div>
+
+                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-1">
+                  <span className="text-amber-400 font-bold uppercase tracking-wider block">Recommended Next Step</span>
+                  <p className="text-slate-200">{selectedIncident.recommendedAction}</p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 space-y-1">
+                  <span className="text-sky-400 font-bold uppercase tracking-wider block">Uncertainty & Human Review Note</span>
+                  <p className="text-slate-200">{selectedIncident.uncertaintyNote}</p>
+                </div>
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-white/10">
+                <button
+                  onClick={() => { store.updateStatus(selectedIncident.id, 'acknowledged', 'Acknowledged by operator'); setSelectedIncident(null); }}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 font-mono text-xs font-bold text-white transition-all"
+                >
+                  Acknowledge
+                </button>
+                <button
+                  onClick={() => { store.updateStatus(selectedIncident.id, 'review', 'Flagged for review queue'); setSelectedIncident(null); }}
+                  className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-mono text-xs font-bold transition-all"
+                >
+                  Mark for Review
+                </button>
+                <button
+                  onClick={() => { store.updateStatus(selectedIncident.id, 'resolved', 'Incident marked resolved'); setSelectedIncident(null); }}
+                  className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-mono text-xs font-bold transition-all"
+                >
+                  Resolve Incident
+                </button>
+              </div>
             </motion.div>
-          )}
+          </div>
+        )}
 
-          <footer className="text-center font-mono text-[10px] uppercase tracking-[0.25em] text-slate-600 pt-12 border-t border-white/[0.06]">
-            SentinelAI Autonomous Node · UBIT Code//Connect '26
-          </footer>
+        {/* PUBLIC INCIDENT REPORT MODAL */}
+        {showReportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#0b0f17] border border-white/15 rounded-3xl max-w-lg w-full p-8 space-y-6 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <h2 className="text-lg font-bold text-white">Public Incident Report Form</h2>
+                <button onClick={() => setShowReportModal(false)} className="p-2 rounded-full bg-white/5 text-slate-400 hover:text-white">
+                  <X className="size-5" />
+                </button>
+              </div>
 
-        </main>
+              <form onSubmit={handleReportSubmit} className="space-y-4 font-mono text-xs">
+                <div>
+                  <label className="block text-slate-400 mb-1">Select Location / Zone</label>
+                  <select value={formZone} onChange={(e: any) => setFormZone(e.target.value)} className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white">
+                    <option value="A">Zone A · Main Gate</option>
+                    <option value="B">Zone B · Campus Corridor</option>
+                    <option value="C">Zone C · Server Room</option>
+                    <option value="D">Zone D · Perimeter Wall</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Incident Category</label>
+                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white">
+                    <option value="Suspicious Activity">Suspicious Activity</option>
+                    <option value="Safety Hazard">Safety Hazard</option>
+                    <option value="Unauthorized Access">Unauthorized Access</option>
+                    <option value="Equipment Malfunction">Equipment Malfunction</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Description</label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Provide brief details of the observation..."
+                    value={formDesc}
+                    onChange={(e) => setFormDesc(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-white resize-none focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3">
+                  <button type="button" onClick={() => setShowReportModal(false)} className="px-4 py-2 rounded-xl bg-white/5 text-slate-300">Cancel</button>
+                  <button type="submit" disabled={formSubmitting} className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition-all">
+                    {formSubmitting ? 'Submitting...' : 'Submit Report'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* FOOTER & DISCLAIMER */}
+        <footer className="pt-12 border-t border-white/[0.06] text-center font-mono text-[10px] text-slate-500 space-y-2">
+          <p>SentinelAI Autonomous Node · UBIT Code//Connect '26 Threat Prevention Prototype</p>
+          <p className="text-slate-600 max-w-xl mx-auto">
+            Disclaimer: This prototype demonstrates automated edge threat detection and response workflows. It does not replace campus authorities, human security personnel, or emergency services. All data is persisted locally in the browser.
+          </p>
+        </footer>
+
       </div>
     </div>
   )
