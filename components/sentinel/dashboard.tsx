@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
-import { History, LayoutDashboard, Loader2, ShieldAlert, Truck, CheckCircle2, Cpu, Flame, Shield, Car, Users, HelpCircle } from 'lucide-react'
+import { History, LayoutDashboard, Loader2, ShieldAlert, Truck, CheckCircle2, Cpu, Flame, Shield, Car, Users, HelpCircle, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useNow } from '@/lib/sentinel/format'
 import { TOTAL_CAMERAS, ZONE_LIST } from '@/lib/sentinel/scenarios'
@@ -15,7 +15,7 @@ import { ThreatCard } from './threat-card'
 import { TopNav } from './top-nav'
 
 type View = 'dashboard' | 'audit'
-type ThreatFilter = 'all' | 'critical' | 'responding' | 'review' | 'fire' | 'intrusion' | 'collision' | 'violence'
+type ThreatFilter = 'none' | 'critical' | 'responding' | 'review' | 'fire' | 'intrusion' | 'collision' | 'violence' | 'all'
 
 const AMBIENT_INTERVAL_MS = 35_000
 
@@ -23,9 +23,9 @@ export function Dashboard() {
   const state = useSentinel()
   const now = useNow()
   const [view, setView] = useState<View>('dashboard')
-  const [threatFilter, setThreatFilter] = useState<ThreatFilter>('critical')
+  // Default to 'none' so cards are hidden until a user explicitly clicks a category!
+  const [threatFilter, setThreatFilter] = useState<ThreatFilter>('none')
 
-  // Drives the incident lifecycle (dispatched -> on-site -> resolving -> resolved/archived).
   useEffect(() => {
     if (!state.hydrated) return
     sentinel.advanceLifecycle()
@@ -147,85 +147,8 @@ export function Dashboard() {
             <motion.div key="dashboard" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
               <SimulationPanel ambient={state.ambient} />
 
-              {/* INTERACTIVE CATEGORY SELECTOR TABS (Solves clutter) */}
-              <div className="panel flex flex-wrap items-center gap-2 rounded-2xl p-3 border border-border/80">
-                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground px-2">
-                  Filter Category:
-                </span>
-                {[
-                  { id: 'critical', label: 'Critical Active', icon: ShieldAlert, count: activeThreats.length, tone: 'text-threat' },
-                  { id: 'responding', label: 'Teams On-Site', icon: Truck, count: activeResponses.length, tone: 'text-warn' },
-                  { id: 'review', label: 'Human Review', icon: CheckCircle2, count: reviewQueue.length, tone: 'text-info' },
-                  { id: 'fire', label: 'Smoke / Fire', icon: Flame, count: state.incidents.filter(i => i.type === 'fire').length },
-                  { id: 'intrusion', label: 'Intrusion', icon: Shield, count: state.incidents.filter(i => i.type === 'intrusion').length },
-                  { id: 'collision', label: 'Collision', icon: Car, count: state.incidents.filter(i => i.type === 'collision').length },
-                  { id: 'violence', label: 'Violence', icon: Users, count: state.incidents.filter(i => i.type === 'violence').length },
-                  { id: 'all', label: 'View All', icon: HelpCircle, count: state.incidents.length },
-                ].map((tab) => {
-                  const active = threatFilter === tab.id
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setThreatFilter(tab.id as ThreatFilter)}
-                      className={cn(
-                        'flex items-center gap-2 rounded-xl px-3.5 py-2 font-mono text-xs font-semibold transition-all',
-                        active
-                          ? 'bg-white/10 text-white shadow-md border border-white/20'
-                          : 'bg-black/30 text-muted-foreground hover:bg-white/[0.05] hover:text-white border border-border/40',
-                      )}
-                    >
-                      <tab.icon className={cn('size-3.5', tab.tone)} />
-                      <span>{tab.label}</span>
-                      <span className="rounded-full bg-black/50 px-1.5 py-0.2 text-[10px] text-white/80 tabular">
-                        {tab.count}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* FOCUSED INCIDENT GRID SECTION */}
+              {/* LIVE ZONE CAMERA GRID (Always visible for clean telemetry overview) */}
               <section className="space-y-4">
-                <div className="flex items-center justify-between border-b border-border pb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-7 items-center justify-center rounded-lg bg-white/10 text-white">
-                      <ShieldAlert className="size-4 text-threat" />
-                    </span>
-                    <div>
-                      <h2 className="text-base font-bold tracking-tight text-white capitalize">
-                        {threatFilter === 'critical' && 'Tier 1: Critical Active Threats'}
-                        {threatFilter === 'responding' && 'Tier 2: Active Responses & Teams On-Site'}
-                        {threatFilter === 'review' && 'Human-in-the-Loop Review Queue'}
-                        {threatFilter === 'fire' && 'Smoke & Fire Incident Feeds'}
-                        {threatFilter === 'intrusion' && 'Intrusion & Unauthorized Access Feeds'}
-                        {threatFilter === 'collision' && 'Vehicle Collision & Traffic Feeds'}
-                        {threatFilter === 'violence' && 'Aggressive Crowd & Violence Feeds'}
-                        {threatFilter === 'all' && 'All System Incidents'}
-                      </h2>
-                      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Showing {filteredIncidents.length} matching operational items
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {filteredIncidents.length === 0 ? (
-                  <div className="panel rounded-2xl border border-border/60 bg-black/20 p-12 text-center font-mono text-xs text-muted-foreground space-y-2">
-                    <p className="text-sm font-semibold text-white">No incidents found in this category.</p>
-                    <p>Select another category tab above or trigger a simulation.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-                    {filteredIncidents.map((incident) => (
-                      <ThreatCard key={incident.id} incident={incident} now={now} />
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* LIVE ZONE CAMERA GRID */}
-              <section className="space-y-4 pt-4">
                 <div className="flex items-center gap-3 border-b border-border pb-3">
                   <span className="flex size-7 items-center justify-center rounded-lg bg-white/10 text-white">
                     <LayoutDashboard className="size-4" />
@@ -255,6 +178,99 @@ export function Dashboard() {
                   })}
                 </div>
               </section>
+
+              {/* INTERACTIVE CATEGORY SELECTOR TABS */}
+              <div className="panel flex flex-wrap items-center gap-2 rounded-2xl p-4 border border-border/80">
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground px-2">
+                  Incident Categories (Click to Inspect):
+                </span>
+                {[
+                  { id: 'critical', label: 'Critical Active', icon: ShieldAlert, count: activeThreats.length, tone: 'text-threat' },
+                  { id: 'responding', label: 'Teams On-Site', icon: Truck, count: activeResponses.length, tone: 'text-warn' },
+                  { id: 'review', label: 'Human Review', icon: CheckCircle2, count: reviewQueue.length, tone: 'text-info' },
+                  { id: 'fire', label: 'Smoke / Fire', icon: Flame, count: state.incidents.filter(i => i.type === 'fire').length },
+                  { id: 'intrusion', label: 'Intrusion', icon: Shield, count: state.incidents.filter(i => i.type === 'intrusion').length },
+                  { id: 'collision', label: 'Collision', icon: Car, count: state.incidents.filter(i => i.type === 'collision').length },
+                  { id: 'violence', label: 'Violence', icon: Users, count: state.incidents.filter(i => i.type === 'violence').length },
+                  { id: 'all', label: 'View All', icon: HelpCircle, count: state.incidents.length },
+                ].map((tab) => {
+                  const active = threatFilter === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setThreatFilter(active ? 'none' : (tab.id as ThreatFilter))}
+                      className={cn(
+                        'flex items-center gap-2 rounded-xl px-3.5 py-2 font-mono text-xs font-semibold transition-all',
+                        active
+                          ? 'bg-white/15 text-white shadow-lg border border-white/30 ring-1 ring-white/20'
+                          : 'bg-black/40 text-muted-foreground hover:bg-white/[0.08] hover:text-white border border-border/40',
+                      )}
+                    >
+                      <tab.icon className={cn('size-3.5', tab.tone)} />
+                      <span>{tab.label}</span>
+                      <span className="rounded-full bg-black/60 px-1.5 py-0.2 text-[10px] text-white/90 tabular">
+                        {tab.count}
+                      </span>
+                    </button>
+                  )
+                })}
+                {threatFilter !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={() => setThreatFilter('none')}
+                    className="ml-auto flex items-center gap-1.5 rounded-xl bg-white/5 px-3 py-2 font-mono text-xs text-muted-foreground hover:text-white border border-border"
+                  >
+                    <EyeOff className="size-3.5" />
+                    <span>Hide Cards</span>
+                  </button>
+                )}
+              </div>
+
+              {/* FOCUSED INCIDENT GRID SECTION (Only shown when a category tab is selected!) */}
+              {threatFilter !== 'none' && (
+                <motion.section 
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-4 pt-2"
+                >
+                  <div className="flex items-center justify-between border-b border-border pb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-7 items-center justify-center rounded-lg bg-white/10 text-white">
+                        <ShieldAlert className="size-4 text-threat" />
+                      </span>
+                      <div>
+                        <h2 className="text-base font-bold tracking-tight text-white capitalize">
+                          {threatFilter === 'critical' && 'Tier 1: Critical Active Threats'}
+                          {threatFilter === 'responding' && 'Tier 2: Active Responses & Teams On-Site'}
+                          {threatFilter === 'review' && 'Human-in-the-Loop Review Queue'}
+                          {threatFilter === 'fire' && 'Smoke & Fire Incident Feeds'}
+                          {threatFilter === 'intrusion' && 'Intrusion & Unauthorized Access Feeds'}
+                          {threatFilter === 'collision' && 'Vehicle Collision & Traffic Feeds'}
+                          {threatFilter === 'violence' && 'Aggressive Crowd & Violence Feeds'}
+                          {threatFilter === 'all' && 'All System Incidents'}
+                        </h2>
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Showing {filteredIncidents.length} matching operational items
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {filteredIncidents.length === 0 ? (
+                    <div className="panel rounded-2xl border border-border/60 bg-black/20 p-12 text-center font-mono text-xs text-muted-foreground space-y-2">
+                      <p className="text-sm font-semibold text-white">No incidents found in this category.</p>
+                      <p>Select another category tab above or trigger a simulation.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+                      {filteredIncidents.map((incident) => (
+                        <ThreatCard key={incident.id} incident={incident} now={now} />
+                      ))}
+                    </div>
+                  )}
+                </motion.section>
+              )}
             </motion.div>
           ) : (
             <motion.div key="audit" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
