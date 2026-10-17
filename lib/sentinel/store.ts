@@ -15,8 +15,10 @@ const STATE_VERSION = 1
 const MAX_AUDIT = 250
 const MAX_ACTIVE = 40
 
-export const ON_SITE_DELAY_MS = 5_000   // "Units Dispatched" -> "Team On-Site & Working"
-export const ARCHIVE_DELAY_MS = 1_800   // "Problem Resolved" shown, then archived
+export const ON_SITE_DELAY_MS = 3_000     // 3s: Units Dispatched -> Team On-Site
+export const RESOLVING_DELAY_MS = 4_000  // 4s: Team On-Site -> Resolving Issue
+export const RESOLVE_HOLD_MS = 3_000     // 3s: Problem Resolved shown before archiving
+export const ARCHIVE_DELAY_MS = 1_800
 
 const EMPTY_STATE: SentinelState = {
   version: STATE_VERSION,
@@ -37,16 +39,17 @@ function buildSeedState(): SentinelState {
   const pastFireResolved: Incident = {
     ...pastFire,
     dispatchedAt: pastFire.detectedAt + 38_000,
-    onSiteAt: pastFire.detectedAt + 43_000,
-    protocolAt: pastFire.detectedAt + 52_000,
+    onSiteAt: pastFire.detectedAt + 41_000,
+    resolvingAt: pastFire.detectedAt + 45_000,
+    closingAt: pastFire.detectedAt + 49_000,
     resolvedAt: pastFire.detectedAt + 9 * min,
     resolution: 'resolved',
     actions: [
       ...pastFire.actions,
       { at: pastFire.detectedAt + 38_000, kind: 'dispatch', label: 'Quick Response Team Bravo-2 dispatched' },
-      { at: pastFire.detectedAt + 43_000, kind: 'onsite', label: 'Team on-site and working in Zone B' },
-      { at: pastFire.detectedAt + 52_000, kind: 'protocol', label: 'Zone B evacuation alarm and HVAC shutdown activated' },
-      { at: pastFire.detectedAt + 9 * min, kind: 'resolved', label: 'Incident resolved and archived by operator' },
+      { at: pastFire.detectedAt + 41_000, kind: 'onsite', label: 'Team arrived on-site in Zone B' },
+      { at: pastFire.detectedAt + 45_000, kind: 'resolving', label: 'Team actively resolving the issue' },
+      { at: pastFire.detectedAt + 49_000, kind: 'resolved', label: 'Problem resolved and archived' },
     ],
   }
 
@@ -65,14 +68,17 @@ function buildSeedState(): SentinelState {
   const pastAccidentResolved: Incident = {
     ...pastAccident,
     dispatchedAt: pastAccident.detectedAt + 41_000,
-    onSiteAt: pastAccident.detectedAt + 46_000,
+    onSiteAt: pastAccident.detectedAt + 44_000,
+    resolvingAt: pastAccident.detectedAt + 48_000,
+    closingAt: pastAccident.detectedAt + 52_000,
     resolvedAt: pastAccident.detectedAt + 14 * min,
     resolution: 'resolved',
     actions: [
       ...pastAccident.actions,
       { at: pastAccident.detectedAt + 41_000, kind: 'dispatch', label: 'Quick Response Team Alpha-1 dispatched' },
-      { at: pastAccident.detectedAt + 46_000, kind: 'onsite', label: 'Team on-site and working in Zone A' },
-      { at: pastAccident.detectedAt + 14 * min, kind: 'resolved', label: 'Incident resolved and archived by operator' },
+      { at: pastAccident.detectedAt + 44_000, kind: 'onsite', label: 'Team arrived on-site in Zone A' },
+      { at: pastAccident.detectedAt + 48_000, kind: 'resolving', label: 'Team actively resolving the issue' },
+      { at: pastAccident.detectedAt + 52_000, kind: 'resolved', label: 'Problem resolved and archived' },
     ],
   }
 
@@ -101,9 +107,7 @@ function persist() {
   try {
     const { hydrated: _h, ...rest } = state
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest))
-  } catch {
-    // Storage may be full or disabled
-  }
+  } catch {}
 }
 
 function setState(updater: (prev: SentinelState) => SentinelState) {
@@ -124,9 +128,7 @@ function init() {
         return
       }
     }
-  } catch {
-    // Fall through
-  }
+  } catch {}
   state = buildSeedState()
   persist()
 }
@@ -137,9 +139,7 @@ if (typeof window !== 'undefined') {
     try {
       state = { ...(JSON.parse(e.newValue) as SentinelState), hydrated: true }
       emit()
-    } catch {
-      // ignore
-    }
+    } catch {}
   })
 }
 
@@ -202,10 +202,7 @@ export const sentinel = {
         i.id === id && !i.dispatchedAt
           ? withAction(
               { ...i, dispatchedAt: Date.now() },
-              {
-                kind: 'dispatch',
-                label: `Quick Response Team dispatched to Zone ${i.zoneId}`,
-              },
+              { kind: 'dispatch', label: `Quick Response Team dispatched to Zone ${i.zoneId}` },
             )
           : i,
       ),
@@ -221,10 +218,7 @@ export const sentinel = {
               { ...i, protocolAt: Date.now() },
               {
                 kind: 'protocol',
-                label:
-                  i.type === 'fire'
-                    ? `Zone ${i.zoneId} evacuation alarm and suppression protocol activated`
-                    : `Zone ${i.zoneId} automated warning broadcast and lockdown engaged`,
+                label: i.type === 'fire' ? `Evacuation protocol activated in Zone ${i.zoneId}` : `Lockdown engaged in Zone ${i.zoneId}`,
               },
             )
           : i,
@@ -238,12 +232,7 @@ export const sentinel = {
       incidents: s.incidents.map((i) =>
         i.id === id && i.queue === 'review'
           ? withAction(
-              {
-                ...i,
-                queue: 'active',
-                severity: 'high',
-                tags: ['HUMAN VERIFIED', ...i.tags.filter((t) => t !== 'HUMAN REVIEW')],
-              },
+              { ...i, queue: 'active', severity: 'high', tags: ['HUMAN VERIFIED', ...i.tags.filter((t) => t !== 'HUMAN REVIEW')] },
               { kind: 'escalated', label: 'Operator verified footage and escalated to active threat' },
             )
           : i,
@@ -264,10 +253,13 @@ export const sentinel = {
     const now = Date.now()
     const due = state.incidents.filter(
       (i) =>
-        (i.closingAt && now - i.closingAt >= ARCHIVE_DELAY_MS) ||
-        (i.dispatchedAt && !i.onSiteAt && !i.closingAt && now - i.dispatchedAt >= ON_SITE_DELAY_MS),
+        (i.closingAt && now - i.closingAt >= RESOLVE_HOLD_MS) ||
+        (i.resolvingAt && !i.closingAt && now - i.resolvingAt >= RESOLVING_DELAY_MS) ||
+        (i.onSiteAt && !i.resolvingAt && !i.closingAt && now - i.onSiteAt >= RESOLVING_DELAY_MS) ||
+        (i.dispatchedAt && !i.onSiteAt && !i.resolvingAt && !i.closingAt && now - i.dispatchedAt >= ON_SITE_DELAY_MS),
     )
     if (due.length === 0) return
+
     setState((s) => {
       let incidents = s.incidents
       let audit = s.audit
@@ -275,20 +267,37 @@ export const sentinel = {
         if (i.closingAt) {
           const archived = withAction(
             { ...i, resolvedAt: now, resolution: 'resolved' as const },
-            {
-              kind: 'resolved',
-              label: 'Problem resolved and archived by operator',
-            },
+            { kind: 'resolved', label: 'Problem resolved and archived' },
             now,
           )
           incidents = incidents.filter((x) => x.id !== i.id)
           audit = [archived, ...audit].slice(0, MAX_AUDIT)
-        } else {
+        } else if (i.resolvingAt && !i.closingAt) {
+          incidents = incidents.map((x) =>
+            x.id === i.id
+              ? withAction(
+                  { ...x, closingAt: now },
+                  { kind: 'resolved', label: 'Problem resolved successfully' },
+                  now,
+                )
+              : x,
+          )
+        } else if (i.onSiteAt && !i.resolvingAt) {
+          incidents = incidents.map((x) =>
+            x.id === i.id
+              ? withAction(
+                  { ...x, resolvingAt: now },
+                  { kind: 'resolving', label: 'Team actively resolving the issue' },
+                  now,
+                )
+              : x,
+          )
+        } else if (i.dispatchedAt && !i.onSiteAt) {
           incidents = incidents.map((x) =>
             x.id === i.id
               ? withAction(
                   { ...x, onSiteAt: now },
-                  { kind: 'onsite', label: `Team on-site and working in Zone ${x.zoneId}` },
+                  { kind: 'onsite', label: `Team arrived on-site in Zone ${x.zoneId}` },
                   now,
                 )
               : x,
@@ -306,10 +315,7 @@ export const sentinel = {
       const now = Date.now()
       const archived = withAction(
         { ...target, resolvedAt: now, resolution: 'false-alarm' },
-        {
-          kind: 'dismissed',
-          label: 'Operator verified footage: dismissed as false alarm',
-        },
+        { kind: 'dismissed', label: 'Operator verified footage: dismissed as false alarm' },
         now,
       )
       return {
