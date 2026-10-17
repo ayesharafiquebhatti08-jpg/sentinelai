@@ -21,51 +21,22 @@ export interface Incident {
 
 const INITIAL_INCIDENTS: Incident[] = [
   {
-    id: 'INC-2026-001',
-    title: 'Unauthorized Perimeter Access Detected',
-    zoneId: 'D',
-    zoneName: 'Zone D · Perimeter Wall',
-    category: 'Intrusion',
-    priority: 'critical',
-    status: 'active',
-    confidence: 0.96,
-    indicators: ['Thermal motion signature near barrier', 'Unscheduled night presence'],
-    recommendedAction: 'Dispatch campus security patrol for visual verification.',
-    uncertaintyNote: 'Shadow distortion possible under low-light floodlamps; human verification required.',
-    timestamp: Date.now() - 1000 * 60 * 12,
-    history: [{ action: 'Automated AI detection trigger', time: Date.now() - 1000 * 60 * 12, user: 'System' }],
-    isDemoData: true,
-  },
-  {
-    id: 'INC-2026-002',
-    title: 'Loitering & Crowd Gathering',
+    id: 'SIG-1007',
+    title: 'Fire or smoke concern reported at Parking Area',
     zoneId: 'B',
-    zoneName: 'Zone B · Campus Corridor',
-    category: 'Crowd Anomaly',
+    zoneName: 'Parking Area',
+    category: 'Fire or smoke concern',
     priority: 'high',
     status: 'review',
-    confidence: 0.82,
-    indicators: ['Prolonged stationary group formation', 'Restricted hallway bottleneck'],
-    recommendedAction: 'Review live feed snapshot and notify student marshals.',
-    uncertaintyNote: 'Possible student club gathering after hours.',
-    timestamp: Date.now() - 1000 * 60 * 45,
-    history: [{ action: 'Flagged for human review queue', time: Date.now() - 1000 * 60 * 45, user: 'System' }],
-    isDemoData: true,
-  },
-  {
-    id: 'INC-2026-003',
-    title: 'Normal Gate Access Verification',
-    zoneId: 'A',
-    zoneName: 'Zone A · Main Gate',
-    category: 'Access Control',
-    priority: 'low',
-    status: 'resolved',
-    confidence: 0.99,
-    indicators: ['Standard ID badge scan verified'],
-    recommendedAction: 'No further action required.',
-    uncertaintyNote: 'Zero ambiguity.',
-    timestamp: Date.now() - 1000 * 60 * 120,
-    history: [{ action: 'Resolved automatically by system policy', time: Date.now() - 1000 * 60 * 120, user: 'System' }],
+    confidence: 0.94,
+    indicators: ['The fire and smoke near a car'],
+    recommendedAction: 'Verify observation on-site immediately.',
+    uncertaintyNote: 'Public report flagged for security review.',
+    timestamp: Date.now() - 1000 * 60 * 12,
+    history: [
+      { action: 'Initial priority High assigned from incident type. Status set to Needs Review.', time: Date.now() - 1000 * 60 * 12, user: 'System' },
+      { action: 'Public report submitted.', time: Date.now() - 1000 * 60 * 12, user: 'Reporter' }
+    ],
     isDemoData: true,
   },
 ]
@@ -74,19 +45,14 @@ export function useSentinelStore() {
   const [hydrated, setHydrated] = useState(false)
   const [incidents, setIncidents] = useState<Incident[]>(INITIAL_INCIDENTS)
   const [audit, setAudit] = useState<{ id: string; action: string; timestamp: number }[]>([
-    { id: 'AUD-1', action: 'System initialized with demo seed data (Browser-local storage mode)', timestamp: Date.now() - 1000 * 60 * 200 }
+    { id: 'AUD-1', action: 'System initialized with demo seed data', timestamp: Date.now() - 1000 * 60 * 200 }
   ])
-  const [ambient, setAmbient] = useState(true)
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('sentinel_incidents_v3')
+      const saved = localStorage.getItem('sentinel_incidents_v4')
       if (saved) {
         setIncidents(JSON.parse(saved))
-      }
-      const savedAudit = localStorage.getItem('sentinel_audit_v3')
-      if (savedAudit) {
-        setAudit(JSON.parse(savedAudit))
       }
     } catch (e) {
       console.error(e)
@@ -94,31 +60,29 @@ export function useSentinelStore() {
     setHydrated(true)
   }, [])
 
-  const saveToStorage = (newIncidents: Incident[], newAudit: any[]) => {
+  const saveToStorage = (newIncidents: Incident[]) => {
     try {
-      localStorage.setItem('sentinel_incidents_v3', JSON.stringify(newIncidents))
-      localStorage.setItem('sentinel_audit_v3', JSON.stringify(newAudit))
+      localStorage.setItem('sentinel_incidents_v4', JSON.stringify(newIncidents))
     } catch (e) {
       console.error(e)
     }
   }
 
   const addIncident = useCallback((data: Omit<Incident, 'id' | 'timestamp' | 'history'>) => {
-    const id = `INC-${Date.now().toString().slice(-6)}`
+    const id = `SIG-${Math.floor(1000 + Math.random() * 9000)}`
     const newIncident: Incident = {
       ...data,
       id,
       timestamp: Date.now(),
-      history: [{ action: `Incident reported manually (${data.category})`, time: Date.now(), user: 'Operator' }],
+      history: [
+        { action: 'Initial priority High assigned from incident type. Status set to Needs Review.', time: Date.now(), user: 'System' },
+        { action: 'Public report submitted.', time: Date.now(), user: 'Reporter' }
+      ],
       isDemoData: false,
     }
     setIncidents(prev => {
       const updated = [newIncident, ...prev]
-      setAudit(prevAudit => {
-        const updatedAudit = [{ id: `AUD-${Date.now()}`, action: `New incident reported: ${id} [${data.zoneName}]`, timestamp: Date.now() }, ...prevAudit]
-        saveToStorage(updated, updatedAudit)
-        return updatedAudit
-      })
+      saveToStorage(updated)
       return updated
     })
     return id
@@ -134,24 +98,16 @@ export function useSentinelStore() {
           history: [{ action: actionLabel, time: Date.now(), user: 'Operator' }, ...inc.history]
         }
       })
-      setAudit(prevAudit => {
-        const updatedAudit = [{ id: `AUD-${Date.now()}`, action: `Incident ${id} updated to ${status}: ${actionLabel}`, timestamp: Date.now() }, ...prevAudit]
-        saveToStorage(updated, updatedAudit)
-        return updatedAudit
-      })
+      saveToStorage(updated)
       return updated
     })
   }, [])
-
-  const toggleAmbient = () => setAmbient(prev => !prev)
 
   return {
     hydrated,
     setHydrated: () => {},
     incidents,
     audit,
-    ambient,
-    toggleAmbient,
     addIncident,
     updateStatus,
   }
